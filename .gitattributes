@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+# Fixture artifacts are bound by SHA-256 (Bytefray writes the trace with CRLF
+# on Windows); git must never normalize their bytes.
+fixtures/** -text

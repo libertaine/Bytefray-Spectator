@@ -1,0 +1,132 @@
+{
+  "backend": null,
+  "completed_at": "2026-10-12T22:35:28.132606Z",
+  "entrants": [
+    {
+      "agent_id": "A",
+      "alive": true,
+      "diagnostic": null,
+      "metadata": {
+        "agent_version": "1.0.0",
+        "api_version": 2,
+        "derived_seed": 14036568730365301318191011634551260512,
+        "entry_point": "agent.py:create_agent",
+        "kind": "python",
+        "local_source_fingerprint": "97f780db83cfe9bb611013aac780de91e68182174af4a4da81cea675b327e12c",
+        "local_source_fingerprint_final": "97f780db83cfe9bb611013aac780de91e68182174af4a4da81cea675b327e12c",
+        "parameters": {
+          "move_step": 64,
+          "search_interval": 4
+        },
+        "processes": [
+          {
+            "process_id": "main",
+            "reach": 128,
+            "share": 1.0
+          }
+        ],
+        "slot": 0,
+        "source_sha256": "8e6c97c7f0c3ead4f656ca2c0f1b265f3a03c500716591db2311f7abf9a3bdf0"
+      },
+      "name": "v6_window_scout",
+      "score": 1000.0,
+      "statistics": {
+        "alive": true,
+        "alive_ticks": 1000,
+        "cpu_total": 8000,
+        "deaths": 0,
+        "kills": 0,
+        "mem_writes": 1,
+        "name": "v6_window_scout",
+        "score": 1000.0,
+        "territory_avg": 9.0,
+        "territory_last": 9,
+        "territory_max": 9,
+        "territory_pct_avg": 1.7578125,
+        "territory_pct_last": 1.7578125,
+        "territory_pct_max": 1.7578125
+      },
+      "termination_reason": null
+    },
+    {
+      "agent_id": "B",
+      "alive": true,
+      "diagnostic": null,
+      "metadata": {
+        "agent_version": "1.0.0",
+        "api_version": 2,
+        "derived_seed": 40655168379502634856783314825577743631,
+        "entry_point": "agent.py:create_agent",
+        "kind": "python",
+        "local_source_fingerprint": "43abe9c1bf45c53e985d5960671c0f3d8fe1746cd741e0a93141919a84501c64",
+        "local_source_fingerprint_final": "43abe9c1bf45c53e985d5960671c0f3d8fe1746cd741e0a93141919a84501c64",
+        "processes": [
+          {
+            "process_id": "main",
+            "reach": 128,
+            "share": 1.0
+          }
+        ],
+        "slot": 1,
+        "source_sha256": "73323e86d2930df3cb276d44cba332e10254557ec388a5b4818d4800f5a0d0dd"
+      },
+      "name": "v6_stationary_opponent",
+      "score": 1000.0,
+      "statistics": {
+        "alive": true,
+        "alive_ticks": 1000,
+        "cpu_total": 7994,
+        "deaths": 0,
+        "kills": 0,
+        "mem_writes": 0,
+        "name": "v6_stationary_opponent",
+        "score": 1000.0,
+        "territory_avg": 7.0,
+        "territory_last": 7,
+        "territory_max": 7,
+        "territory_pct_avg": 1.3671875,
+        "territory_pct_last": 1.3671875,
+        "territory_pct_max": 1.3671875
+      },
+      "termination_reason": null
+    }
+  ],
+  "match_id": "match_1971f1d14781a6e8edd4dc06",
+  "mode": "b2",
+  "occurrence_id": "26420ef8-a66d-4346-b825-797e82e0a1d0",
+  "product_version": "5.0.0",
+  "replay": {
+    "filename": "replay.jsonl",
+    "replay_id": "match_1971f1d14781a6e8edd4dc06",
+    "sha256": "dbe67aa534e23f055c0a43287bbed5fae9878b5c2139bd1df207d4a3dbfbf80f"
+  },
+  "reproducibility": {
+    "action_budget": 8,
+    "arena_size": 512,
+    "entrant_order": [
+      "A",
+      "B"
+    ],
+    "seed": 0,
+    "tick_limit": 1000,
+    "weights": {
+      "alive": 1.0,
+      "kill": 5.0,
+      "territory": 1.0,
+      "territory_bucket": 64
+    },
+    "win_mode": "score_fallback"
+  },
+  "result_id": "result_a7040f4fc273e87273736dc2",
+  "ruleset_id": "bytefray-rules-6-alpha1",
+  "schema": "battle2.result",
+  "schema_version": 2,
+  "score": {
+    "A": 1000.0,
+    "B": 1000.0
+  },
+  "status": "completed",
+  "termination_reason": "tick_limit",
+  "ticks": 1000,
+  "winner": "tie"
+}

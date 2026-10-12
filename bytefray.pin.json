@@ -1,0 +1,12 @@
+{
+  "schema": "bytefray.spectator.pin",
+  "schema_version": 1,
+  "repository": "libertaine/Bytefray",
+  "commit": "9c81718d057c8cd021f6d1cc7938ea19881b78e1",
+  "commit_subject": "fix(v6): verify core-capture endings in sensing playback",
+  "paths": [
+    "engine/src/battle_engine",
+    "client/src/battle_client"
+  ],
+  "note": "The exporter imports these packages from a local Bytefray checkout and refuses to run unless every file under these paths is identical to this commit's tree (no missing, extra or modified files)."
+}

@@ -1,0 +1,125 @@
+{
+  "artifacts": {
+    "replay": {
+      "filename": "replay.jsonl",
+      "sha256": "dbe67aa534e23f055c0a43287bbed5fae9878b5c2139bd1df207d4a3dbfbf80f"
+    },
+    "result": {
+      "filename": "result.json",
+      "sha256": "0e4b714fd791152abd1bd2166001abfc9789f1bb7b025f5f118f7b1a22ebbb07"
+    },
+    "trace": {
+      "filename": "trace.jsonl",
+      "sha256": "7eb925309cbe6299d4219a62cead8d4269d61bd0b6d8f78899e5dc4cd56ddc89"
+    }
+  },
+  "completed_at": "2026-10-12T22:35:28.332411Z",
+  "config": {
+    "action_budget": 8,
+    "arena_size": 512,
+    "max_ticks": 1000,
+    "seed": 0
+  },
+  "declared_product_fixture": true,
+  "engine": {
+    "agent_api_version": 2,
+    "project_name": "Bytefray",
+    "python_version": "3.13.14",
+    "replay_schema_version": 4,
+    "result_schema_version": 2,
+    "version": "5.0.0"
+  },
+  "entrants": [
+    {
+      "agent_id": "A",
+      "capture_complete": true,
+      "drift_detected": false,
+      "full_tree_digest": "5fd0363de9e2eb18c154bacd93228611a082cf6563195b6b88f73288476b4e53",
+      "loaded_final_fingerprint": "97f780db83cfe9bb611013aac780de91e68182174af4a4da81cea675b327e12c",
+      "loaded_initial_fingerprint": "97f780db83cfe9bb611013aac780de91e68182174af4a4da81cea675b327e12c",
+      "name": "v6_window_scout",
+      "parameters": {
+        "move_step": 64,
+        "search_interval": 4
+      },
+      "python_subset_fingerprint": "97f780db83cfe9bb611013aac780de91e68182174af4a4da81cea675b327e12c",
+      "revision_id": "agent-revision_5fd0363de9e2eb18c154bacd93228611a082cf6563195b6b88f73288476b4e53",
+      "start": 0
+    },
+    {
+      "agent_id": "B",
+      "capture_complete": true,
+      "drift_detected": false,
+      "full_tree_digest": "4f97f59305e729827f57ba6c0d47ebcc982b971cd91c5bf7b6ab43576f0fec45",
+      "loaded_final_fingerprint": "43abe9c1bf45c53e985d5960671c0f3d8fe1746cd741e0a93141919a84501c64",
+      "loaded_initial_fingerprint": "43abe9c1bf45c53e985d5960671c0f3d8fe1746cd741e0a93141919a84501c64",
+      "name": "v6_stationary_opponent",
+      "parameters": {},
+      "python_subset_fingerprint": "43abe9c1bf45c53e985d5960671c0f3d8fe1746cd741e0a93141919a84501c64",
+      "revision_id": "agent-revision_4f97f59305e729827f57ba6c0d47ebcc982b971cd91c5bf7b6ab43576f0fec45",
+      "start": 91
+    }
+  ],
+  "match_id": "match_1971f1d14781a6e8edd4dc06",
+  "provenance": "product_teaching_demo",
+  "result_id": "result_a7040f4fc273e87273736dc2",
+  "ruleset_id": "bytefray-rules-6-alpha1",
+  "schema": "bytefray.sensing_demo",
+  "schema_version": 1,
+  "status": "reproducible",
+  "teaching_exchange": {
+    "sequence_verified": true,
+    "steps": [
+      {
+        "action_kind": "sense",
+        "actor_id": "A",
+        "description": "Window Scout requests SENSE(91) in reach; 1 action consumed; result pending.",
+        "detail": {
+          "cost": 1,
+          "sensed_anchors_sample": [
+            91
+          ],
+          "target": 91
+        },
+        "step_index": 1,
+        "tick": 1
+      },
+      {
+        "action_kind": null,
+        "actor_id": "A",
+        "description": "Window Scout receives delivered anonymous sample (91,) from tick 1 action 1.",
+        "detail": {
+          "received_anchors": [
+            91
+          ]
+        },
+        "step_index": 2,
+        "tick": 1
+      },
+      {
+        "action_kind": "move",
+        "actor_id": "A",
+        "description": "Window Scout executes legal MOVE(+64) toward delivered contact 91.",
+        "detail": {
+          "cost": 1,
+          "new_anchor": 64,
+          "operand": 64
+        },
+        "step_index": 3,
+        "tick": 1
+      },
+      {
+        "action_kind": "write",
+        "actor_id": "A",
+        "description": "Window Scout executes legal in-reach WRITE(91) to sampled address.",
+        "detail": {
+          "cost": 1,
+          "operand": 91,
+          "value": 66
+        },
+        "step_index": 4,
+        "tick": 1
+      }
+    ]
+  }
+}
