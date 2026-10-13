@@ -1,0 +1,59 @@
+{
+  "schema": "bytefray.spectator.p1_baseline",
+  "schema_version": 1,
+  "viewer_commit": "3a88c5b5411f96f25c83768d7bbaeac7c16e17d5",
+  "viewer_code_commit": "f95f9ae (scripts/, scenes/, project.godot unchanged since)",
+  "bytefray_pin": "9c81718d057c8cd021f6d1cc7938ea19881b78e1",
+  "bytefray_checkout_head": "2fc3c82e115650b515a4efab39afb172b62535ed",
+  "fixture": "fixtures/showcase (P1 seed 427, spectator_harrier A vs spectator_bastion B)",
+  "fixture_digests": {
+    "fixtures/showcase/presentation/agent_a.json": "111b83a3b6038a693fe1981a374af56014bf1f0ef3c090fb6e0da2b4e27ee5af",
+    "fixtures/showcase/presentation/broadcast.json": "99045a052f2ee8e6f5feaafb9b6cd6374ef20b0f5252184d72a0f70fb78d72fe",
+    "fixtures/showcase/presentation/manifest.json": "526b26cf2b451ac0ebd0ad0fb68b247eb2a3ec50e1292db22d97326e247e546c",
+    "fixtures/showcase/source/match.json": "c227bcc10ab944811f028c75591bea48deb3062bd39c768f7e2abf4ec815e745",
+    "fixtures/showcase/source/replay.jsonl": "cd4a9ed6654faf46efec323cddb0ddf627e07e238bca09db14e6a863abf1cd28",
+    "fixtures/showcase/source/result.json": "f757bf9d0464b502d61dc94910a07198a83decebe5a1fb6ccb7217735327cc38",
+    "fixtures/showcase/source/trace.jsonl": "7180592eeb5787331bf07317eb7e4de878c86092bd5c73189a480598b8f02311",
+    "fixtures/showcase/fixture.json": "afc1572425776330645fbd61cbbfff01ba2dbd656d3c7831bd0b333db1e96885"
+  },
+  "capture_command": "godot --path . --script res://tests/capture_frames.gd -- --fixture=showcase --out=<dir> --ticks=1,9,12,320,447,461,467,476,477",
+  "renderer": "Godot 4.7.2 gl_compatibility, 1280x800, real GPU (not headless)",
+  "ticks": [
+    1,
+    9,
+    12,
+    320,
+    447,
+    461,
+    467,
+    476,
+    477
+  ],
+  "screenshots": {
+    "agent_a-tick-0001.png": "e01358691d42cedfdf10606f91e0655b472ed132848762aa25e12204101c4728",
+    "agent_a-tick-0009.png": "0ebb8d2da5c4f96252aa134e288dcb35c78f41e714fcff979cc31b95997ef05a",
+    "agent_a-tick-0012.png": "bd87ebb818548b3a21d9d55157bd52311ea2bc39884103d48c4803f8f9a456f1",
+    "agent_a-tick-0320.png": "7a2b71f8e28a6e15763f92ff39c587a6ee35de76bc496358a54a4808eb374173",
+    "agent_a-tick-0447.png": "b0271e4091c9d88d78a782e55c9a12d47a1a9e42a229a33a1331e1b5d83039e6",
+    "agent_a-tick-0461.png": "57b3827eeb95fbab145668173149b7d44bc193ba7d11422e1a3917cafc07a9c2",
+    "agent_a-tick-0467.png": "986494f1daececd2acf200d24d788680ad49270cad7eb31a3638e73f9c861794",
+    "agent_a-tick-0476.png": "f7f5f0068020c137a7bd5450c5878e9cdec22d1ac4722a73812741c27918b565",
+    "agent_a-tick-0477.png": "f20f5268ddb0f120677162c3a5c19c1457fbbdc1b952c647dda7df22d3f9c997",
+    "broadcast-tick-0001.png": "7d1150305cb89deaa767eb8e9ff2d24642b4da7ab6bb3acfa987bf24dfd86fce",
+    "broadcast-tick-0009.png": "bdccd217b8f2649517f79c2349914c611b744942dfe5ddf613036535d2ba2ef6",
+    "broadcast-tick-0012.png": "b938f6f9116b7d8a12d909c93842bb46de2497825bcf2caf96f907ecadefccbb",
+    "broadcast-tick-0320.png": "a1a0b9b35b0fc5bf371e68cbabed7d7f65ea97a3945776466074a90e801f8357",
+    "broadcast-tick-0447.png": "f76fbc02823d7c8ba226321d719a9b8dda72205a7c80a65bbb2199bdfc5bb39f",
+    "broadcast-tick-0461.png": "4066bc75973d131851316eec75230cb458311d540335d0d9696c24ff24ab77e0",
+    "broadcast-tick-0467.png": "c547fab24b17c867a6310a34de4cce327bc8a05c094c9e4b8591b3768218f5c1",
+    "broadcast-tick-0476.png": "3bc328b675e651ff955e6093c6ab08c35cc95f58582e4a9b959018c7234d7936",
+    "broadcast-tick-0477.png": "17c9d0659e834e6f56329c944c27088c365496db0812cd31dd00576c70f4bd49"
+  },
+  "tests_at_baseline": {
+    "pytest": "36 passed in 241.43 s (--basetemp outside the repository)",
+    "smoke_test.gd": "35 checks, 0 failures",
+    "fixture_check.gd showcase": "26 checks, 0 failures",
+    "fixture_check.gd dev": "20 checks, 0 failures"
+  },
+  "baseline_recordings": "docs/p0d/recordings/godot-*-440-477-5tps.mp4 (recorded at f95f9ae, same viewer code)"
+}
