@@ -45,8 +45,10 @@ GODOT = Path(os.environ.get("GODOT", "C:/Program Files/Godot/Godot_v4.7.2-stable
 TICKS = 120
 STARTS = (0, 91)  # the teaching layout: A's first scan window covers B's anchor
 UNOBSERVED = ("quiet", "busy", "split")
-# The sounds the Agent A perspective can make (scripts/sound_cues.gd AGENT_SOUNDS).
+# The sounds the Agent A perspective can make (scripts/sound_cues.gd AGENT_SOUNDS), and the
+# announcer's opening sequence, which is the same for every match.
 AGENT_SOUNDS = {"sense", "receipt", "contact", "write", "move_up", "move_down"}
+INTRO = "intro"
 
 
 def _match(root: Path, name: str, agent_a: Path, opponent: str) -> Path:
@@ -207,7 +209,7 @@ def test_viewer_agent_perspective_is_identical_under_unobserved_activity(traces:
         assert not started or line.split("|", 1)[0] in playing, line[:80]
         heard += started
     # (Window Scout only moves forward, so move_down never occurs here.)
-    assert {"sense", "contact", "write", "move_up"} <= {cue["sound"] for cue in heard} <= AGENT_SOUNDS
+    assert {"sense", "contact", "write", "move_up", INTRO} <= {cue["sound"] for cue in heard} <= AGENT_SOUNDS | {INTRO}
     assert {cue["variant"] for cue in heard} == {0}
 
 
@@ -224,8 +226,8 @@ def test_viewer_agent_perspective_never_reveals_when_the_match_ends(traces: dict
         assert re.fullmatch(rf"Tick \d+ \(limit {TICKS}\)   [A-Z_]+   step \d+", fields[5]), fields[5]
         assert fields[6].endswith(f"/{TICKS}"), fields[6]
         assert "Result" not in fields[4] and "eliminated" not in fields[4]
-        # Agent A wins this match but is never delivered that: no outcome sounds.
-        assert {cue["sound"] for cue in json.loads(fields[-1])} <= AGENT_SOUNDS
+        # Agent A wins this match but is never delivered that: no outcome sounds, no victory call.
+        assert {cue["sound"] for cue in json.loads(fields[-1])} <= AGENT_SOUNDS | {INTRO}
     # The match itself ended long before the limit.
     assert ticks < TICKS
 

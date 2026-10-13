@@ -4,14 +4,15 @@ extends RefCounted
 ## Every function is a pure function of a model and a frame range (from, to]:
 ## the frames playback has just passed. Nothing here plays audio, and nothing
 ## here changes playback or the models. A cue is {"i": frame, "sound": name,
-## "variant": voice}, in frame order.
+## "variant": voice}, in frame order. The announcer's victory call ("announce")
+## also carries the winner's agent "name" and "seat" (entrant id).
 ##
 ## Broadcast cues come from broadcast.json through the broadcast model and its
 ## effects. Agent A cues come from agent_a.json through the agent model alone:
 ## its own applied SENSE, WRITE and MOVE and its delivered samples, voiced as
 ## Agent A. Agent A is never delivered a WRITE's outcome, an opponent action,
 ## a disruption, an elimination or the result, so none of those has an Agent A
-## cue.
+## cue, and Agent A never hears the victory call.
 
 const PHASE_OBSERVATION := 0
 const PHASE_ACTION := 1
@@ -66,7 +67,13 @@ static func _tick_end_cues(model, i: int) -> Array:
 		cues.append(_cue(i, "elimination", int(model.entrant_index[entrant])))
 	var winner := String(model.result["winner"])
 	if tick >= model.max_tick and i == model.index_for_tick_end(model.max_tick) and model.entrant_index.has(winner):
-		cues.append(_cue(i, "victory", int(model.entrant_index[winner])))
+		var e := int(model.entrant_index[winner])
+		cues.append(_cue(i, "victory", e))
+		# The announcer names the winner from its verified entrant record.
+		var call := _cue(i, "announce", e)
+		call["name"] = String(model.entrants[e]["name"])
+		call["seat"] = winner
+		cues.append(call)
 	return cues
 
 

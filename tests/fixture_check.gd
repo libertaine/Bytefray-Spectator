@@ -194,6 +194,12 @@ func _run(main: Node) -> void:
 		main.seek_tick(0)
 		main.ticks_per_second = 20.0
 		main.set_playing(true)
+		# Playing from tick 0 starts with the announcer, which holds the match clock.
+		var held := true
+		while main.intro_left() > 0.0:
+			main._process(0.1)
+			held = held and main.current_tick() == 0
+		check(held, "%s: the opening sequence holds tick 0" % perspective)
 		for i in 10:
 			main._process(0.1)
 		check(main.current_tick() == 20, "%s plays 20 ticks in 1 s at 20 ticks/s (got %d)" % [perspective, main.current_tick()])

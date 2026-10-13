@@ -122,6 +122,12 @@ func _run(main: Node) -> void:
 	main.seek_tick(0)
 	main.ticks_per_second = 20.0
 	main.set_playing(true)
+	# Playing from tick 0 starts with the announcer, which holds the match clock.
+	var intro_steps := 0
+	while main.intro_left() > 0.0 and intro_steps < 100:
+		main._process(0.1)
+		intro_steps += 1
+	check(intro_steps > 0 and main.current_tick() == 0 and main.index == main.broadcast.index_for_tick_end(0), "the opening sequence holds tick 0 (%d steps)" % intro_steps)
 	for i in 10:
 		main._process(0.1)
 	check(main.current_tick() == 20, "play advances 20 ticks in 1 s at 20 ticks/s (got %d)" % main.current_tick())

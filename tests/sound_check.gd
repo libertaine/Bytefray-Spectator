@@ -1,5 +1,5 @@
 extends SceneTree
-## Headless check of the procedural sound effects. Nothing needs to be audible:
+## Headless check of the procedural sound effects and the announcer. Nothing needs to be audible:
 ## it checks the generated clips, the cues against references this script
 ## builds itself from the raw presentation files, and what the viewer starts
 ## during playback, seeking, pausing, muting and switching.
@@ -14,6 +14,7 @@ const AgentModel := preload("res://scripts/agent_model.gd")
 const Synth := preload("res://scripts/sound_synth.gd")
 const Cues := preload("res://scripts/sound_cues.gd")
 const SoundEffects := preload("res://scripts/sound_effects.gd")
+const Announcer := preload("res://scripts/announcer.gd")
 const SHOWCASE := "res://fixtures/showcase/presentation"
 const DEV := "res://fixtures/dev/presentation"
 const FPS := 60.0
@@ -48,8 +49,10 @@ func _process(_delta: float) -> bool:
 			_check_cues(dir, heard)
 		for sound in Synth.SOUNDS:
 			check(heard.has(sound), "the fixtures exercise the %s sound" % sound)
+		_check_announcer_assets()
 		if _main.load_error == "":
 			_check_viewer(_main)
+			_check_announcer(_main)
 		else:
 			check(false, "main loads the showcase: %s" % _main.load_error)
 		print("sound checks run in %d ms" % (Time.get_ticks_msec() - started))
@@ -133,6 +136,18 @@ func _check_cues(dir: String, heard: Dictionary) -> void:
 	for cue in agent_actual:
 		agent_only = agent_only and Cues.AGENT_SOUNDS.has(cue["sound"]) and cue["variant"] == Cues.AGENT_VARIANT
 	check(agent_only and not agent_actual.is_empty(), "%s: Agent A has only its own sounds, in its own voice" % name)
+
+	# The call names whoever the record says won: in a copy whose recorded winner is
+	# the other entrant (or a tie), the call follows the record, not the showcase.
+	if name == "showcase":
+		for winner in ["A", "tie"]:
+			var other: Dictionary = b.duplicate(true)
+			other["result"]["winner"] = winner
+			var other_model := BroadcastModel.new(other)
+			var last := other_model.frame_count() - 1
+			var calls := Cues.broadcast_cues(other_model, BroadcastEffects.new(other_model), last - 1, last).filter(func(cue: Dictionary) -> bool: return cue["sound"] in ["announce", "victory"])
+			var expected_calls: Array = [] if winner == "tie" else [{"i": last, "sound": "victory", "variant": 0}, {"i": last, "sound": "announce", "variant": 0, "name": "spectator_harrier", "seat": "A"}]
+			check(calls == expected_calls, "a record won by %s gets %s" % [winner, expected_calls])
 
 	# Neither fixture records a refused action, so refuse one of each in a copy.
 	var refused_doc: Dictionary = b.duplicate(true)
@@ -229,6 +244,7 @@ func _broadcast_reference(doc: Dictionary) -> Array:
 				var winner := String(doc["result"]["winner"])
 				if int(frame["t"]) == last_tick and index.has(winner):
 					cues.append({"i": i, "sound": "victory", "variant": int(index[winner])})
+					cues.append({"i": i, "sound": "announce", "variant": int(index[winner]), "name": String(doc["entrants"][int(index[winner])]["name"]), "seat": winner})
 		out.append(cues)
 	return out
 
@@ -298,7 +314,7 @@ func _play(m: Node, steps: int) -> Array:
 func _check_viewer(m: Node) -> void:
 	var sound: Node = m.sound
 	check(m._sound_toggle.button_pressed and int(m._volume.value) == 60, "the Sound toggle starts on and the volume at 60")
-	check(m._hint.text.contains("M sound") and (m._help.get_child(0) as Label).text.contains("Sound effects on / off"), "the key hint and help name the sound key")
+	check(m._hint.text.contains("M sound") and (m._help.get_child(0) as Label).text.contains("Sound effects and announcer on / off"), "the key hint and help name the sound key")
 	sound.take_played()
 
 	# Seeking, stepping, jumping and dragging start nothing.
@@ -511,3 +527,251 @@ func _key(m: Node, keycode: Key) -> void:
 	event.keycode = keycode
 	event.pressed = true
 	m._unhandled_input(event)
+
+
+# ---------------------------------------------------------------------------
+# The announcer: voice clips, names, the opening sequence and the victory call
+# ---------------------------------------------------------------------------
+
+func _check_announcer_assets() -> void:
+	var clips := Announcer.voice()
+	var record: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(Announcer.VOICE_DIR.path_join("voice.json")))
+	check(Announcer.load_problems.is_empty() and clips.size() == (record["words"] as Dictionary).size(), "every announcer clip verifies against voice.json (%s)" % [Announcer.load_problems])
+	for word in ["FIGHT", "WINS", "PLAYER", "A", "B", "BASTION", "HARRIER"]:
+		check(clips.has(word), "the announcer has a clip for %s" % word)
+	# A clip whose bytes differ from voice.json is never used.
+	var dir := ProjectSettings.globalize_path("user://announcer_tamper")
+	DirAccess.make_dir_recursive_absolute(dir)
+	for word in record["words"]:
+		var name := String(record["words"][word]["file"])
+		var bytes := FileAccess.get_file_as_bytes(Announcer.VOICE_DIR.path_join(name))
+		if word == "BASTION":
+			bytes[bytes.size() / 2] = bytes[bytes.size() / 2] ^ 1
+		var out := FileAccess.open(dir.path_join(name), FileAccess.WRITE)
+		out.store_buffer(bytes)
+		out.close()
+	var voice_json := FileAccess.open(dir.path_join("voice.json"), FileAccess.WRITE)
+	voice_json.store_string(JSON.stringify(record))
+	voice_json.close()
+	var tampered := Announcer.load_voice(dir)
+	check(not tampered.has("BASTION") and tampered.has("WINS") and Announcer.load_problems.size() == 1, "a tampered clip is left out (%s)" % [Announcer.load_problems])
+	for name in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute(dir.path_join(name))
+	DirAccess.remove_absolute(dir)
+	Announcer.load_problems = []
+	check(Announcer.parse_wav(PackedByteArray([1, 2, 3])).is_empty(), "a file that is not 16-bit mono WAV gives no samples")
+
+	# Names: from the agent name, with no winner written into the logic.
+	check(Announcer.spoken_words("spectator_bastion") == PackedStringArray(["BASTION"]), "spectator_bastion is spoken BASTION")
+	check(Announcer.spoken_words("v6_window_scout") == PackedStringArray(["WINDOW", "SCOUT"]), "v6_window_scout is spoken WINDOW SCOUT")
+	check(Announcer.spoken_words("spectator_v2_iron-fist") == PackedStringArray(["IRON", "FIST"]), "prefixes and separators are dropped")
+	check(Announcer.victory_words("spectator_bastion", "B") == PackedStringArray(["BASTION", "WINS"]), "the showcase winner is called BASTION WINS")
+	check(Announcer.victory_words("spectator_harrier", "A") == PackedStringArray(["HARRIER", "WINS"]), "Harrier would be called HARRIER WINS")
+	check(Announcer.victory_words("spectator_newcomer", "A") == PackedStringArray(["PLAYER", "A", "WINS"]), "a name without clips falls back to PLAYER A WINS")
+	check(Announcer.victory_words("spectator_newcomer", "Z").is_empty() and Announcer.victory_call("spectator_newcomer", "Z").is_empty(), "with no clip for any form of the name there is no call")
+
+	# The opening sequence: about 3 s, rising in intensity and pitch, ending with FIGHT.
+	var rumble := Announcer.rumble()
+	var intro := Announcer.intro()
+	var seconds := intro.size() / float(Announcer.MIX_RATE)
+	check(seconds > 2.5 and seconds < 3.3, "the opening sequence lasts about 3 s (%.2f s)" % seconds)
+	var quarter := rumble.size() / 4
+	var early := _rms(rumble, 0, quarter)
+	var late := _rms(rumble, quarter * 3, quarter * 4)
+	var crossings_early := _crossings(rumble, quarter / 2, quarter)
+	var crossings_late := _crossings(rumble, quarter * 3, quarter * 3 + quarter / 2)
+	check(late > 2.0 * early, "the rumble grows in intensity (rms %.3f -> %.3f)" % [early, late])
+	check(crossings_late > 2 * crossings_early, "the rumble rises in pitch (%d -> %d zero crossings)" % [crossings_early, crossings_late])
+	var fight: PackedFloat32Array = Announcer.voice()["FIGHT"]
+	var at := int(round(Announcer.VOICE_AT * Announcer.MIX_RATE))
+	check(intro.size() == at + fight.size() and _rms(intro, at, intro.size()) > 0.1, "the sequence ends with the voice saying FIGHT")
+	check(Announcer.intro() == intro and Announcer.rumble() == rumble, "the opening sequence is the same every time")
+	var call := Announcer.victory_call("spectator_bastion", "B")
+	var delay := int(round(Announcer.CALL_DELAY * Announcer.MIX_RATE))
+	check(_rms(call, 0, delay) == 0.0 and _rms(call, delay, call.size()) > 0.05, "the victory call waits for the victory sting, then speaks (rms %.3f, %.2f s)" % [_rms(call, delay, call.size()), call.size() / float(Announcer.MIX_RATE)])
+
+
+func _rms(samples: PackedFloat32Array, from: int, to: int) -> float:
+	var total := 0.0
+	for n in range(from, to):
+		total += samples[n] * samples[n]
+	return sqrt(total / maxf(1.0, to - from))
+
+
+func _crossings(samples: PackedFloat32Array, from: int, to: int) -> int:
+	var count := 0
+	for n in range(from + 1, to):
+		if (samples[n - 1] < 0.0) != (samples[n] < 0.0):
+			count += 1
+	return count
+
+
+func _sounds(steps: Array) -> Array:
+	var out: Array = []
+	for step in steps:
+		for cue in step[2]:
+			out.append(cue["sound"])
+	return out
+
+
+func _check_announcer(m: Node) -> void:
+	var sound: Node = m.sound
+	m.set_sound_enabled(true)
+	m._volume.value = 60
+	for perspective in ["broadcast", "agent_a"]:
+		# From the beginning: the opening sequence plays and holds the match clock.
+		m.set_playing(false)
+		m.set_perspective(perspective)
+		m.restart()
+		m.ticks_per_second = 20.0
+		m.set_playing(true)
+		var started: Array = sound.take_played()
+		var length: float = m.intro_left()
+		check(length > 2.5 and started.size() == 1 and started[0]["sound"] == "intro", "%s: playing from the start begins with the opening sequence (%.2f s)" % [perspective, length])
+		check(m._caption.text == m.INTRO_CAPTION, "%s: the caption says the match starts after the announcer" % perspective)
+		var held := true
+		var elapsed := 0.0
+		for k in 30:  # 0.5 s
+			m._process(1.0 / FPS)
+			elapsed += 1.0 / FPS
+			held = held and m.index == 0
+		# Pausing holds the sequence: no time passes, and playing again continues it.
+		m.set_playing(false)
+		var left: float = m.intro_left()
+		check(sound.is_paused() and sound._intro_player.stream_paused and left > 0.0, "%s: pausing during the opening sequence holds it" % perspective)
+		m.set_playing(true)
+		check(not sound.is_paused() and is_equal_approx(m.intro_left(), left) and sound.take_played().is_empty(), "%s: playing again continues the sequence without restarting it" % perspective)
+		var sounds_during: Array = []
+		while m.intro_left() > 0.0:
+			var before: int = m.index
+			m._process(1.0 / FPS)
+			elapsed += 1.0 / FPS
+			held = held and m.index == before and m.index == 0
+			sounds_during.append_array(sound.take_played())
+		check(held and sounds_during.is_empty(), "%s: the opening sequence never advances the match (%.2f s at index 0)" % [perspective, elapsed])
+		check(absf(elapsed - length) < 1.0 / FPS + 1e-6, "%s: the match starts when the sequence ends (%.3f vs %.3f s)" % [perspective, elapsed, length])
+		_play(m, 30)
+		check(m.index > 0 and m._caption.text != m.INTRO_CAPTION, "%s: then the match plays" % perspective)
+		m.set_playing(false)
+
+	# Any later tick skips it; so does a seek during it.
+	m.set_perspective("broadcast")
+	m.seek_tick(5)
+	m.set_playing(true)
+	check(m.intro_left() == 0.0 and not _sounds([[0, 0, sound.take_played()]]).has("intro"), "playing from a later tick skips the opening sequence")
+	m.set_playing(false)
+	m.restart()
+	m.set_playing(true)
+	_play(m, 20)
+	m._timeline.value = 50
+	check(m.intro_left() == 0.0 and sound.active_voices() == 0, "a seek during the opening sequence ends it")
+	m.step_frame(0)
+	_play(m, 20)
+	check(m.current_tick() > 50, "after the seek the match plays from the new position")
+	m.set_playing(false)
+	# Sound off (or volume 0) skips it, and turning sound off during it starts the match.
+	m.set_sound_enabled(false)
+	m.restart()
+	m.set_playing(true)
+	check(m.intro_left() == 0.0, "with sound off there is no opening sequence")
+	m.set_playing(false)
+	m.set_sound_enabled(true)
+	m._volume.value = 0
+	m.restart()
+	m.set_playing(true)
+	check(m.intro_left() == 0.0, "at zero volume there is no opening sequence")
+	m.set_playing(false)
+	m._volume.value = 60
+	m.restart()
+	m.set_playing(true)
+	_play(m, 10)
+	_key(m, KEY_M)
+	check(m.intro_left() == 0.0 and sound.active_voices() == 0, "turning sound off during the opening sequence ends it")
+	_play(m, 30)
+	check(m.index > 0, "and the match starts")
+	m.set_playing(false)
+	_key(m, KEY_M)
+
+	# Playback with and without the opening sequence visits the same positions.
+	var runs: Array = []
+	for enabled in [true, false]:
+		m.set_sound_enabled(enabled)
+		m.restart()
+		m.ticks_per_second = 20.0
+		m.set_playing(true)
+		var positions := PackedInt32Array()
+		var guard := 0
+		while m.playing and positions.size() < 900 and guard < 2000:
+			guard += 1
+			var in_intro: bool = m.intro_left() > 0.0
+			m._process(1.0 / FPS)
+			if not in_intro:
+				positions.append(m.index)
+		runs.append(positions)
+		m.set_playing(false)
+	m.set_sound_enabled(true)
+	check(runs[0] == runs[1], "the match plays the same positions with or without the opening sequence")
+
+	# The victory call: once, at the recorded end, naming the verified winner.
+	m.set_perspective("broadcast")
+	var winner := String(m.broadcast.result["winner"])
+	var entrant := int(m.broadcast.entrant_index[winner])
+	check(winner == String(m.manifest["match"]["winner"]), "the broadcast winner is the manifest's verified winner (%s)" % winner)
+	m.seek_tick(470)
+	m.ticks_per_second = 5.0
+	m.set_playing(true)
+	var heard: Array = []
+	var before_end := true
+	while m.playing:
+		for step in _play(m, 1):
+			for cue in step[2]:
+				heard.append(cue)
+				before_end = before_end and (cue["sound"] != "announce" or int(cue["i"]) == m.frame_count() - 1)
+	var calls: Array = heard.filter(func(cue: Dictionary) -> bool: return cue["sound"] == "announce")
+	check(calls.size() == 1 and before_end and calls[0]["name"] == m.broadcast.entrants[entrant]["name"] and calls[0]["seat"] == winner, "one victory call, at the recorded end, for %s" % [calls])
+	check(not calls.is_empty() and Announcer.victory_words(calls[0]["name"], calls[0]["seat"]) == PackedStringArray(["BASTION", "WINS"]), "the showcase call is BASTION WINS")
+	check(m._side.text.contains("Result: B spectator_bastion wins"), "the result shown is unchanged")
+	# Seeking to the end, End, and playing again from the end never call again.
+	var again: Array = []
+	for k in 3:
+		m.jump_to_end()
+		m.seek_tick(477)
+		m.set_playing(true)
+		again.append_array(_sounds(_play(m, 5)))
+		again.append_array(_sounds([[0, 0, sound.take_played()]]))
+		m.set_playing(false)
+	check(not again.has("announce") and not again.has("victory"), "repeated seeking to the end never repeats the call (%s)" % [again])
+	# Muted, the end is silent; at zero volume too.
+	for setting in ["off", "zero"]:
+		if setting == "off":
+			m.set_sound_enabled(false)
+		else:
+			m._volume.value = 0
+		m.seek_tick(476)
+		m.set_playing(true)
+		var silent := _sounds(_play(m, 400))
+		check(silent.is_empty(), "with sound %s the end has no call (%s)" % [setting, silent])
+		m.set_playing(false)
+		m.set_sound_enabled(true)
+		m._volume.value = 60
+
+	# A tie never names a winner, and Agent A never hears the call.
+	m.load_fixture(DEV)
+	m.seek_tick(995)
+	m.ticks_per_second = 5.0
+	m.set_playing(true)
+	var tie := _sounds(_play(m, 400))
+	check(not tie.has("announce") and not tie.has("victory") and m._side.text.contains("Result: tie"), "the tie at the end of the dev fixture has no victory call (%s)" % [tie])
+	m.set_playing(false)
+	m.load_fixture(SHOWCASE)
+	m.set_perspective("agent_a")
+	m.seek_tick(400)
+	m.ticks_per_second = 60.0
+	m.set_playing(true)
+	var agent_heard := []
+	while m.playing:
+		agent_heard.append_array(_sounds(_play(m, 1)))
+	var outcome := agent_heard.filter(func(s: String) -> bool: return s in ["announce", "victory", "elimination", "core_damage", "disruption"])
+	check(outcome.is_empty() and not agent_heard.is_empty(), "Agent A hears no outcome and no victory call (%s)" % [outcome])
+	m.set_perspective("broadcast")
+	sound.stop_all()

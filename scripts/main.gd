@@ -22,6 +22,12 @@ extends Control
 ## agent_a.json alone). Every seek, step, restart, perspective switch or
 ## fixture load cuts them, so a jump never replays the past. Pausing holds
 ## them; resuming at the same position continues them.
+##
+## The announcer's opening sequence (rumble, then FIGHT) plays when playback
+## starts at tick 0 with sound on; playing from any later tick skips it. It
+## holds the match clock: the match starts only once it has finished. Pausing
+## holds it, and a seek, a switch or turning sound off ends it. The victory call
+## is a broadcast sound cue at the recorded end (see sound_cues.gd).
 
 const FixtureLoader := preload("res://scripts/fixture_loader.gd")
 const BroadcastModel := preload("res://scripts/broadcast_model.gd")
@@ -51,6 +57,7 @@ const RECENT_ACTIONS := 6
 const TEST_OPTIONS := ["--out=", "--ticks=", "--core-log=", "--fps=", "--frames="]
 const NO_COUNTS := {"writes": 0, "took": 0, "core_hits": 0, "recovered": 0, "hits": 0, "moves": 0, "senses": 0, "reads": 0, "refused": 0}
 # Static text: the same at every position, so it reveals nothing about the match.
+const INTRO_CAPTION := "Get ready...  (the match starts after the announcer; seek to skip)"
 const AGENT_NOTE := "Agent A is never told the outcome. Switch to Broadcast (Tab) to see it."
 const KEY_HINT := "Space play  |  Left/Right step  |  Shift+Left/Right tick  |  Home/End  |  G jump to tick  |  Tab perspective  |  -/+ speed  |  L legend  |  M sound  |  H help"
 const HELP := """Keyboard
@@ -62,13 +69,14 @@ const HELP := """Keyboard
   Tab                    Switch Broadcast / Agent A
   - / +                  Slower / faster playback
   L                      Show or hide the legend
-  M                      Sound effects on / off (volume beside it)
+  M                      Sound effects and announcer on / off (volume beside it)
   H or F1                Show or hide this help
 
 Playback gives every recorded action of a tick an equal, in-order share
 of its time: at 1 tick/s each one appears in turn. Effects fade over
 3 ticks; any seek redraws them from the record. Sounds play only
-while playing; a seek never replays them."""
+while playing; a seek never replays them. Playing from tick 0
+starts with the announcer; from a later tick it is skipped."""
 
 var manifest: Dictionary = {}
 var tick_limit := 0
@@ -88,6 +96,7 @@ var _play_progress := 0.0  # ticks elapsed since that boundary, in [0, 1)
 var _play_index := -1  # index playback last set (anything else means a seek)
 var _syncing_slider := false
 var _sound_paused_at: Array = []  # [perspective, index] where playback paused the sound
+var _intro_left := 0.0  # seconds of the opening sequence still to play (0 = none)
 
 var _ring: RingView
 var _legend: LegendView
@@ -271,9 +280,12 @@ func set_playing(value: bool, ring_out: bool = false) -> void:
 		_play_button.text = "Pause" if playing else "Play"
 	if playing and not was_playing:
 		if _sound_paused_at == [perspective, index]:
-			sound.resume()
+			sound.resume()  # an opening sequence in progress continues too
 		else:
 			sound.stop_all()
+			_intro_left = 0.0
+			if load_error.is_empty() and current_tick() == 0:
+				_intro_left = sound.play_intro(index)
 		_sound_paused_at = []
 	elif was_playing and not playing and not ring_out:
 		sound.pause()
@@ -289,6 +301,7 @@ func set_playing(value: bool, ring_out: bool = false) -> void:
 func _jumped() -> void:
 	_play_index = -1
 	_sound_paused_at = []
+	_intro_left = 0.0
 	if sound:
 		sound.stop_all()
 
@@ -296,6 +309,22 @@ func _jumped() -> void:
 func set_sound_enabled(value: bool) -> void:
 	sound.set_enabled(value)
 	_sound_toggle.set_pressed_no_signal(value)
+	_sound_settings_changed()
+
+
+## Seconds of the opening sequence still to play (0 when none is playing).
+func intro_left() -> float:
+	return _intro_left
+
+
+## Turning sound off or the volume to zero ends the opening sequence: the match starts.
+func _sound_settings_changed() -> void:
+	if _intro_left > 0.0 and not sound.is_audible():
+		sound.stop_all()
+		_intro_left = 0.0
+		if playing:
+			_sync_play_position()
+		_refresh()
 
 
 ## Playback position from the current index: the last completed tick boundary
@@ -320,6 +349,15 @@ func _process(delta: float) -> void:
 	if index != _play_index:
 		_jumped()  # moved by something other than playback
 		_sync_play_position()
+	if _intro_left > 0.0:
+		# The opening sequence holds the match clock; its time is not match time.
+		_intro_left -= delta
+		sound.play_cues([], delta)
+		if _intro_left <= 0.0:
+			_intro_left = 0.0
+			_sync_play_position()
+		_refresh()
+		return
 	var from := index
 	_play_progress += delta * ticks_per_second
 	var whole := int(floor(_play_progress))
@@ -406,6 +444,8 @@ func _refresh() -> void:
 		_title.text = "Agent %s (%s) - delivered information only" % [agent.entrant_id, agent.entrant_name]
 		_caption.text = "Receipt: %s   Opponent activity: %s" % [state["receipt"], agent.opponent_activity]
 		_side.text = _agent_panel(state)
+	if _intro_left > 0.0:
+		_caption.text = INTRO_CAPTION
 	if perspective == "broadcast":
 		_position_label.text = "Tick %d / %d   %s   frame %d / %d" % [tick, model.max_tick, phase, index + 1, model.frame_count()]
 	else:
@@ -701,7 +741,11 @@ func _build_ui() -> void:
 	_volume.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_volume.focus_mode = Control.FOCUS_NONE  # Left/Right stay playback keys
 	_volume.tooltip_text = "Sound effects volume"
-	_volume.value_changed.connect(func(value: float) -> void: sound.set_volume(value / 100.0))
+	_volume.value_changed.connect(
+		func(value: float) -> void:
+			sound.set_volume(value / 100.0)
+			_sound_settings_changed()
+	)
 	controls.add_child(_volume)
 
 	_hint = Label.new()

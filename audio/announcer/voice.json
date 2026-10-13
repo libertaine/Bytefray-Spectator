@@ -1,0 +1,96 @@
+{
+  "generator": "spectator-announcer-voice-v1",
+  "mix_rate": 22050,
+  "settings": {
+    "drive": 2.0,
+    "echo": [],
+    "gravel_depth": 0.25,
+    "gravel_hz": 41.0,
+    "hold": 1,
+    "levels": 96,
+    "lowpass_hz": 4500.0,
+    "peak": 0.9,
+    "pitch": 0.92,
+    "trim_pad": 0.03,
+    "trim_threshold": 0.004
+  },
+  "ssml": {
+    "pitch": "x-low",
+    "rate": "-10%"
+  },
+  "voice": "Microsoft David Desktop",
+  "words": {
+    "A": {
+      "file": "a.wav",
+      "raw": "raw/a.wav",
+      "raw_sha256": "ea8b45c8da36ee047571ad22f5d4dbe5d49a94cb0107021dc05059c23879532b",
+      "seconds": 0.2801,
+      "sha256": "016975189c1a961fd018a88a638d6e87cc819171b2965b1983f6643ad7a070bf",
+      "text": "Ay"
+    },
+    "B": {
+      "file": "b.wav",
+      "raw": "raw/b.wav",
+      "raw_sha256": "f5500c4e4f2b0f6744cdf6c2a44da0ad25ca6ae7fd1a7dcbeb751e5d84d36975",
+      "seconds": 0.3587,
+      "sha256": "787e19c335bf799ca16a9eb52a4452d0523f5beb2a1d40096e2daa6f7e1f6c4f",
+      "text": "Bee"
+    },
+    "BASTION": {
+      "file": "bastion.wav",
+      "raw": "raw/bastion.wav",
+      "raw_sha256": "13e50f42c33b5f4e704dc266e7946afb7e197008f51184ecc11c65567de37f45",
+      "seconds": 0.7014,
+      "sha256": "06be0a13c4f9bb65a5703c93cd549f1e18ef45b2de7c42bec8d01d2d593e05c2",
+      "text": "Bastion"
+    },
+    "C": {
+      "file": "c.wav",
+      "raw": "raw/c.wav",
+      "raw_sha256": "a5858d30c4ed0ab7a05f463531657aeeeebf3030cb63799c11529a8e1adcda05",
+      "seconds": 0.4035,
+      "sha256": "69b9a3be5542744414de4e5fc5a603a00313b3a412f153f871e64e26cfe1c660",
+      "text": "See"
+    },
+    "D": {
+      "file": "d.wav",
+      "raw": "raw/d.wav",
+      "raw_sha256": "ed962b868d7ba82d587abd4dc231b40a661fdb8a1f89db57a0b2621c4b05d16a",
+      "seconds": 0.353,
+      "sha256": "47ce4e66dd4466b53f090f0fc18ba8d66eeb537f16e125985ee5d14135bb9219",
+      "text": "Dee"
+    },
+    "FIGHT": {
+      "file": "fight.wav",
+      "raw": "raw/fight.wav",
+      "raw_sha256": "8f45756a9bb80eac4d1822a328636e65bf909c3a5baf383f099021f04c5a500d",
+      "seconds": 0.518,
+      "sha256": "3e59e2eb9b354ff3ece22adce67fab574bd97f7502a25db6172ee272a671de8f",
+      "text": "Fight!"
+    },
+    "HARRIER": {
+      "file": "harrier.wav",
+      "raw": "raw/harrier.wav",
+      "raw_sha256": "fe8a115cac4bb003699861b34e914ff4a08bcae4c363d0868810a130308fd0dd",
+      "seconds": 0.6789,
+      "sha256": "b0ff57d2ae99ecb916f2b6a6a2b26a9fc1ed496cf683ab9ab67f803c741155a5",
+      "text": "Harrier"
+    },
+    "PLAYER": {
+      "file": "player.wav",
+      "raw": "raw/player.wav",
+      "raw_sha256": "b75879182ac442270d64944af7cd7317fb02761dd86eff8aff90dba3fb651c24",
+      "seconds": 0.5315,
+      "sha256": "6ffeeeb77429e5f9f5180fc9f5c8e6934870cb9a1a7b84fb4a559e428e9e05c2",
+      "text": "Player"
+    },
+    "WINS": {
+      "file": "wins.wav",
+      "raw": "raw/wins.wav",
+      "raw_sha256": "1f34560b8977695a4bb46f37c882738119d9560abf4a7362b078c733d6b0113a",
+      "seconds": 0.5682,
+      "sha256": "ffd0a86f83939e29a7accc34c4c6f451380eeadf7b3a1cd4206d0b9ac98fa489",
+      "text": "wins!"
+    }
+  }
+}

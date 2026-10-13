@@ -39,7 +39,10 @@ and refuses it if any file differs from its manifest. Set `GODOT` or pass
 | `project.godot`, `scenes/`, `scripts/` | Godot viewer (`broadcast_effects.gd`: broadcast-only effects, core status and tick summaries derived from recorded frames; `legend_view.gd`: the legend) |
 | `scripts/sound_synth.gd`, `sound_cues.gd`, `sound_effects.gd` | Procedural sound effects: PCM synthesis, cues derived from recorded frames, and the reusable player (see [Sound effects](#sound-effects)) |
 | `tests/smoke_test.gd` | Headless playback smoke test |
-| `tests/sound_check.gd` | Headless sound check: clips, cues against references from the raw files, playback, seeking, muting, throttling |
+| `tests/sound_check.gd` | Headless sound and announcer check: clips, cues against references from the raw files, playback, seeking, muting, throttling, the opening sequence and the victory call |
+| `scripts/announcer.gd` | The match announcer: opening sequence and victory call (see [Match announcer](#match-announcer)) |
+| `audio/announcer/` | The announcer's verified word clips, their raw speech and `voice.json` (made by `exporter/make_announcer_voice.py`) |
+| `tests/render_announcer.gd` | Renders the announcer to WAV files for listening |
 | `tests/agent_view_trace.gd` | Records everything the Agent A perspective shows (used by the differential tests) |
 | `tests/fixture_check.gd` | Generic headless playback check for any fixture (`-- --fixture=<dir>`) |
 | `tests/capture_frames.gd` | Renders screenshots of a fixture into a fixed 1280x800 viewport (needs a real renderer, not `--headless`) |
@@ -111,6 +114,11 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 & $godot --headless --path . --script res://tests/smoke_test.gd
 & $godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=res://fixtures/showcase/presentation
 & $godot --headless --path . --script res://tests/sound_check.gd
+& $godot --headless --path . --script res://tests/render_announcer.gd -- --out=<dir>
+
+# Announcer voice clips (offline; speaking needs Windows and the Microsoft David Desktop voice)
+& $py exporter/make_announcer_voice.py --check               # verify the committed clips
+& $py exporter/make_announcer_voice.py --name <agent name>    # add a future agent's spoken name
 & $godot --path .                       # opens the showcase; options below
 
 # Launch options (after --): --fixture=showcase|dev|<dir>, --perspective=broadcast|agent_a,
@@ -134,7 +142,7 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 | Tab | Switch Broadcast ↔ Agent A |
 | - / + | Slower / faster (1, 2, 5, 10, 20, 60 or 200 ticks/s) |
 | L | Show or hide the legend |
-| M | Sound effects on or off (the **Sound** toggle; the slider beside it sets the volume) |
+| M | Sound effects and announcer on or off (the **Sound** toggle; the slider beside it sets the volume) |
 | H, F1 or ? | Show or hide the keyboard help |
 
 The timeline slider seeks by tick. A key hint line is always shown.
@@ -228,6 +236,53 @@ rounder. The same request always gives the same bytes.
 Sound never feeds back into playback. The cues are computed from the frames
 playback has already shown, and positions, captions and exports are
 identical with sound on or off.
+
+## Match announcer
+
+An arcade-style announcer opens a match and calls the winner. Its voice is a
+set of word clips under `audio/announcer/`, generated offline by
+`exporter/make_announcer_voice.py`, which works in two steps:
+
+1. The Windows SAPI voice Microsoft David Desktop speaks each word (SSML
+   pitch x-low, rate -10%).
+2. Deterministic Python processing makes it deeper and gravelly, and
+   obviously synthetic. The steps are a gentle trim, an 8% pitch drop, a
+   41 Hz amplitude buzz, overdrive, 96-level bit-crushing and a low-pass.
+
+The raw and processed clips are committed. Speaking a word again gives the
+same bytes, and `--check` confirms that every processed clip reproduces from
+its raw clip. The viewer runs no speech synthesis and uses no network. It
+verifies each clip against its SHA-256 in `voice.json` and never plays one
+that does not verify.
+
+- **Opening sequence (about 2.9 s).** A low electronic rumble (38 Hz rising to
+  about 170 Hz) gains harmonics, intensity, distortion and a quickening
+  pulse. It cuts out, and the announcer says FIGHT!
+  - It plays when playback starts at tick 0 with sound on. Playing from any
+    later tick skips it.
+  - It holds the match clock: the match does not move until it has finished,
+    and the caption says the match starts after the announcer.
+  - Pausing holds it, and playing again continues it.
+  - A seek, a perspective switch, or turning the sound off (or the volume to
+    zero) ends it, and the match starts.
+- **Victory call.** At the recorded end of a match with a winner, the
+  elimination burst and victory sting play, then the announcer calls
+  "<NAME> WINS!". For the showcase this is "BASTION WINS!".
+  - The name comes from the verified broadcast record: the entrant whose id
+    is the recorded winner. Its spoken name is its agent name without a
+    leading `spectator` or version word (`spectator_bastion` → BASTION).
+  - A future agent needs a clip of its name (`--name`). Until it has one, the
+    call falls back to "PLAYER A WINS!" (or B, C, D).
+  - A tie has no winner and no call. Seeking to the end never plays the call;
+    only playback passing the recorded end does, once.
+- **Agent A** hears the opening sequence (the same for every match), but never
+  the victory call or any outcome sound.
+- **Controls.** The Sound toggle, the M key and the volume govern the
+  announcer and the effects together. There is no separate setting.
+
+Intelligibility and sound quality can only be judged by listening; see
+`docs/ANNOUNCER_LISTENING_EVALUATION_01.md`, which lists the rendered files
+under `docs/announcer_listening/`.
 
 ## Showcase fixture
 
