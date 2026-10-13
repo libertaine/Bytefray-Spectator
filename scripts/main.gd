@@ -6,16 +6,31 @@ extends Control
 ## the position on tick boundaries only (never a global decision index), so the
 ## agent perspective cannot be positioned by hidden opponent activity. The agent
 ## perspective shows only the public tick limit, never when the match ends.
+##
+## Launch options (after `--`): --fixture=showcase|dev|<dir> (default
+## showcase), --perspective=broadcast|agent_a, --tick=<n>, --speed=<ticks/s>
+## (one of SPEEDS) and --play.
 
 const FixtureLoader := preload("res://scripts/fixture_loader.gd")
 const BroadcastModel := preload("res://scripts/broadcast_model.gd")
 const AgentModel := preload("res://scripts/agent_model.gd")
 const RingView := preload("res://scripts/ring_view.gd")
 
-const DEFAULT_FIXTURE := "res://fixtures/dev/presentation"
+const FIXTURES := {
+	"showcase": "res://fixtures/showcase/presentation",
+	"dev": "res://fixtures/dev/presentation",
+}
+const DEFAULT_FIXTURE := "res://fixtures/showcase/presentation"
 const SPEEDS := [1.0, 5.0, 20.0, 60.0, 200.0]  # ticks per second
 const PHASE_NAMES := ["OBSERVATION", "ACTION", "TICK_END"]
 const PERSPECTIVES := ["broadcast", "agent_a"]
+const REASONS := {
+	"last_agent_standing": "last agent standing",
+	"all_agents_dead": "all agents eliminated",
+	"tick_limit": "tick limit reached",
+}
+# Static text: the same at every position, so it reveals nothing about the match.
+const AGENT_NOTE := "Agent A is never told the outcome. Switch to Broadcast (Tab) to see it."
 
 var manifest: Dictionary = {}
 var tick_limit := 0
@@ -45,11 +60,43 @@ var _controls: Array[Control] = []
 
 func _ready() -> void:
 	_build_ui()
-	var fixture := DEFAULT_FIXTURE
-	for arg in OS.get_cmdline_user_args():
+	var options := launch_options(OS.get_cmdline_user_args())
+	if load_fixture(options["fixture"]).is_empty():
+		apply_launch_options(options)
+
+
+## Parses launch options; an unrecognised value is reported and ignored.
+static func launch_options(args: PackedStringArray) -> Dictionary:
+	var options := {"fixture": DEFAULT_FIXTURE, "perspective": "broadcast", "tick": -1, "speed": -1, "play": false}
+	for arg in args:
+		var value := arg.get_slice("=", 1)
 		if arg.begins_with("--fixture="):
-			fixture = arg.trim_prefix("--fixture=")
-	load_fixture(fixture)
+			options["fixture"] = FIXTURES.get(value, value)
+		elif arg.begins_with("--perspective=") and PERSPECTIVES.has(value):
+			options["perspective"] = value
+		elif arg.begins_with("--tick=") and value.is_valid_int() and int(value) >= 0:
+			options["tick"] = int(value)
+		elif arg.begins_with("--speed=") and value.is_valid_float() and SPEEDS.has(float(value)):
+			options["speed"] = SPEEDS.find(float(value))
+		elif arg == "--play":
+			options["play"] = true
+		elif not (arg.begins_with("--out=") or arg.begins_with("--ticks=")):  # test-script options
+			printerr("Ignoring unrecognised launch option: ", arg)
+	return options
+
+
+func apply_launch_options(options: Dictionary) -> void:
+	set_perspective(options["perspective"])
+	if int(options["tick"]) >= 0:
+		seek_tick(int(options["tick"]))
+	if int(options["speed"]) >= 0:
+		set_speed_index(int(options["speed"]))
+	set_playing(options["play"])
+
+
+func set_speed_index(i: int) -> void:
+	ticks_per_second = SPEEDS[i]
+	_speed_button.select(i)
 
 
 func load_fixture(dir: String) -> String:
@@ -187,7 +234,7 @@ func _refresh() -> void:
 	var tick := int(state["tick"])
 	var phase: String = PHASE_NAMES[int(state["phase"])]
 	if perspective == "broadcast":
-		_ring.show_broadcast(state, broadcast.entrants, broadcast.arena_size)
+		_ring.show_broadcast(state, broadcast.entrants, broadcast.arena_size, _result_banner(tick))
 		_title.text = "Broadcast - full world state"
 		_caption.text = state["caption"]
 		_side.text = _broadcast_panel(tick)
@@ -223,16 +270,33 @@ func _broadcast_panel(tick: int) -> String:
 			"alive" if alive.has(entrant["id"]) else "eliminated",
 			broadcast.core_cells_owned(index, i),
 		])
-	if tick >= broadcast.max_tick and broadcast.is_tick_end(index):
+	if _at_recorded_end(tick):
 		lines.append("")
-		lines.append("Result: %s (%s, %d ticks)" % [
-			broadcast.result["winner"], broadcast.result["termination_reason"], int(broadcast.result["ticks"]),
-		])
+		var reason := String(broadcast.result["termination_reason"])
+		lines.append("Result: %s (%s, tick %d)" % [_winner_text(), REASONS.get(reason, reason), int(broadcast.result["ticks"])])
 	return "\n".join(lines)
 
 
+func _at_recorded_end(tick: int) -> bool:
+	return tick >= broadcast.max_tick and broadcast.is_tick_end(index)
+
+
+func _winner_text() -> String:
+	var winner := String(broadcast.result["winner"])
+	if not broadcast.entrant_index.has(winner):
+		return winner
+	return "%s %s wins" % [winner, broadcast.entrants[int(broadcast.entrant_index[winner])]["name"]]
+
+
+func _result_banner(tick: int) -> String:
+	if not _at_recorded_end(tick):
+		return ""
+	var winner := String(broadcast.result["winner"])
+	return _winner_text().to_upper() if broadcast.entrant_index.has(winner) else "RESULT: " + winner.to_upper()
+
+
 func _agent_panel(state: Dictionary) -> String:
-	var lines: PackedStringArray = ["Own core: cells %d-%d" % [
+	var lines: PackedStringArray = ["[color=#8a8f98]%s[/color]" % AGENT_NOTE, "", "Own core location: cells %d-%d (ownership not shown)" % [
 		int(state["core_base"]), (int(state["core_base"]) + int(state["core_size"]) - 1) % agent.arena_size,
 	]]
 	for process in state["processes"]:
@@ -312,7 +376,7 @@ func _build_ui() -> void:
 	for speed in SPEEDS:
 		_speed_button.add_item("%d ticks/s" % int(speed))
 	_speed_button.select(1)
-	_speed_button.item_selected.connect(func(i: int) -> void: ticks_per_second = SPEEDS[i])
+	_speed_button.item_selected.connect(set_speed_index)
 	controls.add_child(_speed_button)
 	_controls.append_array([_perspective_button, _speed_button, _timeline])
 

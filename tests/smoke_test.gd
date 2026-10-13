@@ -56,8 +56,13 @@ func _run(main: Node) -> void:
 	check(int(match_info["arena_size"]) == 512, "fixture arena is 512")
 	check(int(match_info["seed"]) == 0, "fixture uses the declared seed 0")
 
+	# The viewer opens the showcase fixture by default.
 	var ready: bool = main.is_node_ready() and main.broadcast != null and main.agent != null
-	check(ready and main.load_error == "", "main scene loads the verified fixture: %s" % main.load_error)
+	check(ready and main.load_error == "", "main scene loads the default fixture: %s" % main.load_error)
+	check(ready and int(main.manifest["match"]["seed"]) == 427, "the default fixture is the showcase")
+	_check_launch_options(main)
+	check(main.load_fixture(FIXTURE) == "", "the dev fixture loads")
+	ready = main.broadcast != null and main.agent != null
 	if not ready:
 		return
 	var ring: Control = main._ring
@@ -127,6 +132,19 @@ func _run(main: Node) -> void:
 
 	# Tampering: a one-byte change to a presentation file is rejected.
 	_check_tamper(main)
+
+
+func _check_launch_options(main: Node) -> void:
+	var options: Dictionary = main.launch_options(PackedStringArray([
+		"--fixture=dev", "--perspective=agent_a", "--tick=50", "--speed=20", "--play",
+	]))
+	check(options == {"fixture": FIXTURE, "perspective": "agent_a", "tick": 50, "speed": 2, "play": true}, "launch options parse: %s" % [options])
+	var defaults: Dictionary = main.launch_options(PackedStringArray(["--perspective=omniscient", "--speed=7", "--tick=-3"]))
+	check(defaults == {"fixture": main.DEFAULT_FIXTURE, "perspective": "broadcast", "tick": -1, "speed": -1, "play": false}, "invalid launch options are ignored")
+	main.apply_launch_options(main.launch_options(PackedStringArray(["--perspective=agent_a", "--tick=100", "--speed=60"])))
+	check(main.perspective == "agent_a" and main.current_tick() == 100 and main.ticks_per_second == 60.0 and not main.playing, "launch options apply")
+	main.apply_launch_options(main.launch_options(PackedStringArray([])))
+	check(main.perspective == "broadcast" and main.current_tick() == 100, "default launch options keep broadcast")
 
 
 func _check_tamper(main: Node) -> void:

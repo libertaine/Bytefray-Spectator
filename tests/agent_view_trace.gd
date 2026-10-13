@@ -4,10 +4,10 @@ extends SceneTree
 ## Run: godot --headless --path . --script res://tests/agent_view_trace.gd -- --fixture=<dir> --out=<file>
 ##
 ## Each line is one observation of the visible agent-perspective outputs (title,
-## caption, side panel, position label, timeline value and range, footer and the
-## ring view's state) after a viewer operation: stepping every frame, stepping
-## ticks backwards, seeking every tick, dragging the timeline, playing at a fixed
-## frame rate, and switching in from every broadcast frame. Switching lines are
+## caption, side panel, position label, timeline value and range, footer, and the
+## ring view's state and banner) after a viewer operation: stepping every frame,
+## stepping ticks backwards, seeking every tick, dragging the timeline, playing at
+## a fixed frame rate, and switching in from every broadcast frame. Switching lines are
 ## run-length collapsed, because how many broadcast frames map to one agent
 ## position is broadcast data, not agent data.
 
@@ -46,7 +46,7 @@ func _observe(tag: String) -> String:
 	return "|".join([
 		tag, m.perspective, m._title.text, m._caption.text, m._side.text.replace("\n", "\\n"),
 		m._position_label.text, "%d/%d" % [int(m._timeline.value), int(m._timeline.max_value)],
-		m._footer.text, JSON.stringify(m._ring.state),
+		m._footer.text, JSON.stringify(m._ring.state), m._ring.banner,
 	])
 
 

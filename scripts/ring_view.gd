@@ -4,6 +4,8 @@ extends Control
 ##
 ## The view keeps broadcast data only while in broadcast mode. show_agent()
 ## drops it, so an agent perspective can only ever draw agent-visible state.
+## In broadcast mode an eliminated entrant's process markers are drawn dimmed
+## and crossed out, and a banner (the verified result) can be shown at the end.
 
 const ENTRANT_COLORS: Array[Color] = [
 	Color("#3fb6ff"), Color("#ff9f43"), Color("#c18bff"), Color("#5be37d"),
@@ -20,13 +22,15 @@ var mode := ""
 var arena_size := 512
 var state: Dictionary = {}
 var entrants: Array = []  # broadcast mode only
+var banner := ""  # broadcast mode only
 var agent_color := ENTRANT_COLORS[0]
 
 
-func show_broadcast(new_state: Dictionary, broadcast_entrants: Array, cells: int) -> void:
+func show_broadcast(new_state: Dictionary, broadcast_entrants: Array, cells: int, result_banner: String = "") -> void:
 	mode = "broadcast"
 	arena_size = cells
 	entrants = broadcast_entrants
+	banner = result_banner
 	state = new_state
 	queue_redraw()
 
@@ -35,6 +39,7 @@ func show_agent(new_state: Dictionary, cells: int) -> void:
 	mode = "agent"
 	arena_size = cells
 	entrants = []
+	banner = ""
 	state = new_state
 	queue_redraw()
 
@@ -42,6 +47,7 @@ func show_agent(new_state: Dictionary, cells: int) -> void:
 func clear() -> void:
 	mode = ""
 	entrants = []
+	banner = ""
 	state = {}
 	queue_redraw()
 
@@ -103,12 +109,36 @@ func _draw_broadcast(center: Vector2, radius: float, width: float) -> void:
 		for cell in entrants[i]["core"]:
 			var held: bool = owners[int(cell)] == i
 			_cell_arc(center, radius + width * 0.95, int(cell), color if held else color.darkened(0.6), width * 0.45)
-	var disrupted: Array = state["disrupted"]
 	for anchor in state["anchors"]:
 		var index := int(_entrant_index(String(anchor[0])))
 		var color := ENTRANT_COLORS[index % ENTRANT_COLORS.size()]
-		var is_disrupted := disrupted.any(func(d: Array) -> bool: return d[0] == anchor[0] and d[1] == anchor[1])
-		_marker(center, radius + width * 1.6, float(anchor[2]), color, not is_disrupted)
+		var style := marker_style(anchor)
+		if style == "eliminated":
+			color = color.darkened(0.7)
+		_marker(center, radius + width * 1.6, float(anchor[2]), color, style == "active")
+		if style == "eliminated":
+			_cross(_at(center, radius + width * 1.6 + 7.0, float(anchor[2]) + 0.5), 8.0, Color(0.85, 0.85, 0.85))
+	if not banner.is_empty():
+		var font := ThemeDB.fallback_font
+		var font_size := int(clampf(radius * 0.11, 14.0, 30.0))
+		var text_size := font.get_string_size(banner, HORIZONTAL_ALIGNMENT_CENTER, -1, font_size)
+		var origin := center + Vector2(-text_size.x / 2.0, font_size * 0.35)
+		draw_string(font, origin, banner, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
+
+
+## Broadcast only: "eliminated", "disrupted" or "active" for a process anchor.
+func marker_style(anchor: Array) -> String:
+	if not (state["alive"] as Array).has(anchor[0]):
+		return "eliminated"
+	var disrupted: Array = state["disrupted"]
+	if disrupted.any(func(d: Array) -> bool: return d[0] == anchor[0] and d[1] == anchor[1]):
+		return "disrupted"
+	return "active"
+
+
+func _cross(at: Vector2, half: float, color: Color) -> void:
+	draw_line(at + Vector2(-half, -half), at + Vector2(half, half), color, 2.0)
+	draw_line(at + Vector2(-half, half), at + Vector2(half, -half), color, 2.0)
 
 
 func _entrant_index(entrant_id: String) -> int:
@@ -121,9 +151,14 @@ func _entrant_index(entrant_id: String) -> int:
 func _draw_agent(center: Vector2, radius: float, width: float) -> void:
 	for cell in arena_size:
 		_cell_arc(center, radius, cell, UNKNOWN, width)
+	# Own core as an outline: its location is known, its ownership is not
+	# delivered, so it must not look like the broadcast's solid "held" band.
 	var core_base := int(state["core_base"])
+	var core_radius := radius + width * 0.95
 	for offset in int(state["core_size"]):
-		_cell_arc(center, radius + width * 0.95, (core_base + offset) % arena_size, agent_color, width * 0.45)
+		var cell := (core_base + offset) % arena_size
+		for edge in [-1.0, 1.0]:
+			_cell_arc(center, core_radius + edge * width * 0.225, cell, agent_color, 2.0)
 	var sample: Variant = state["latest_sample"]
 	if sample != null:
 		var color: Color = SAMPLE_COLORS.get(String(sample["status"]), Color.WHITE)

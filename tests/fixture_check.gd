@@ -1,7 +1,7 @@
 extends SceneTree
 ## Generic headless playback check for any verified presentation fixture.
 ##
-## Run: godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=<dir>
+## Run: godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=<dir|showcase|dev>
 ## Exit code 0 = pass, 1 = failure (each failure is printed).
 ##
 ## Checks: the manifest and both files load and verify; every frame of both
@@ -36,6 +36,7 @@ func _initialize() -> void:
 		if arg.begins_with("--fixture="):
 			_fixture = arg.trim_prefix("--fixture=")
 	_main = (load("res://scenes/main.tscn") as PackedScene).instantiate()
+	_fixture = _main.FIXTURES.get(_fixture, _fixture)  # same aliases as the viewer
 	root.add_child(_main)  # main reads --fixture= itself in _ready
 
 
@@ -68,19 +69,33 @@ func _run(main: Node) -> void:
 	var last_tick := 0
 	var monotonic := true
 	var alive_counts: Dictionary = {}
+	var banner_early := false
+	var styles_ok := true
 	for i in range(1, main.frame_count()):
 		main.step_frame(1)
 		monotonic = monotonic and main.current_tick() >= last_tick
 		last_tick = main.current_tick()
 		alive_counts[(ring.state["alive"] as Array).size()] = true
+		banner_early = banner_early or (ring.banner != "" and i < main.frame_count() - 1)
+		for anchor in ring.state["anchors"]:
+			var eliminated: bool = not (ring.state["alive"] as Array).has(anchor[0])
+			styles_ok = styles_ok and (ring.marker_style(anchor) == "eliminated") == eliminated
 	check(monotonic, "broadcast ticks are monotonic")
 	check(main.current_tick() == ticks, "broadcast ends at tick %d" % ticks)
+	check(styles_ok, "process markers are styled eliminated exactly when their entrant is not alive")
+	check(not banner_early and ring.banner != "", "the result banner appears only at the recorded end")
 	var alive: Array = ring.state["alive"]
 	if String(match_info["termination_reason"]) == "last_agent_standing":
 		check(alive == [winner], "only the winner is alive at the end (%s)" % [alive])
 		check(main._side.text.contains("eliminated"), "the loser is shown eliminated")
 		var loser := 1 - int(main.broadcast.entrant_index[winner])
+		var loser_id := String(main.broadcast.entrants[loser]["id"])
 		check(main.broadcast.core_cells_owned(main.index, loser) == 0, "the loser's core shows 0/8 at the end")
+		check(main._caption.text.contains("%s %s eliminated (core 0/8)" % [loser_id, main.broadcast.entrants[loser]["name"]]), "the final caption names the eliminated entrant: %s" % main._caption.text)
+		var loser_markers: Array = (ring.state["anchors"] as Array).filter(func(a: Array) -> bool: return a[0] == loser_id)
+		check(not loser_markers.is_empty() and loser_markers.all(func(a: Array) -> bool: return ring.marker_style(a) == "eliminated"), "the loser's process markers are drawn eliminated")
+		var winner_name := String(main.broadcast.entrants[int(main.broadcast.entrant_index[winner])]["name"])
+		check(ring.banner == ("%s %s wins" % [winner, winner_name]).to_upper(), "the banner names the winner: %s" % ring.banner)
 	check(main._side.text.contains("Result: %s" % winner), "broadcast shows the verified result")
 	check(int(main._timeline.max_value) == ticks, "broadcast timeline spans the recorded match")
 	for i in range(main.frame_count() - 1):
@@ -103,6 +118,8 @@ func _run(main: Node) -> void:
 		label_ok = label_ok and label.contains("(limit %d)" % main.tick_limit) and not label.contains("/")
 		label_ok = label_ok and int(main._timeline.max_value) == main.tick_limit
 		hidden_ok = hidden_ok and not main._side.text.contains("Result") and not main._side.text.contains("eliminated")
+		hidden_ok = hidden_ok and ring.banner == "" and not main._caption.text.contains("eliminated")
+		hidden_ok = hidden_ok and main._side.text.begins_with("[color=#8a8f98]%s" % main.AGENT_NOTE)
 	check(keys_ok, "agent perspective holds no broadcast state")
 	check(label_ok, "agent perspective shows only the public tick limit")
 	check(hidden_ok, "agent perspective never shows the result or eliminations")

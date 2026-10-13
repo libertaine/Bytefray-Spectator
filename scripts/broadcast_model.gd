@@ -102,14 +102,20 @@ func state(index: int) -> Dictionary:
 		"anchors": frame["anchors"],
 		"disrupted": frame["disrupted"],
 		"alive": frame["alive"],
-		"caption": caption(frame),
+		"caption": caption(index),
 	}
 
 
-func caption(frame: Dictionary) -> String:
+func caption(index: int) -> String:
+	var frame: Dictionary = frames[index]
 	match int(frame["p"]):
 		PHASE_TICK_END:
-			return "Tick %d ends" % int(frame["t"])
+			var text := "Tick %d ends" % int(frame["t"])
+			for entrant in eliminated_at(index):
+				var i := int(entrant_index[entrant])
+				var core_size := (entrants[i]["core"] as Array).size()
+				text += "  -  %s %s eliminated (core %d/%d)" % [entrant, entrants[i]["name"], core_cells_owned(index, i), core_size]
+			return text
 		0:
 			return "%s/%s receives its observation" % [frame["actor"], frame["process"]]
 	var text := "%s/%s %s" % [frame["actor"], frame["process"], String(frame["kind"]).to_upper()]
@@ -120,6 +126,15 @@ func caption(frame: Dictionary) -> String:
 	if frame["sensed"] != null:
 		text += " (sample taken; delivered next callback)"
 	return text
+
+
+## Entrants alive in the previous frame but not in this one.
+func eliminated_at(index: int) -> Array:
+	if index == 0:
+		return []
+	var before: Array = frames[index - 1]["alive"]
+	var now: Array = frames[index]["alive"]
+	return before.filter(func(entrant: Variant) -> bool: return not now.has(entrant))
 
 
 ## Cells of `entrant`'s own core it still owns at `index`.
