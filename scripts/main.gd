@@ -4,7 +4,8 @@ extends Control
 ##
 ## Perspectives are separate models built from separate files. Switching maps
 ## the position on tick boundaries only (never a global decision index), so the
-## agent perspective cannot be positioned by hidden opponent activity.
+## agent perspective cannot be positioned by hidden opponent activity. The agent
+## perspective shows only the public tick limit, never when the match ends.
 
 const FixtureLoader := preload("res://scripts/fixture_loader.gd")
 const BroadcastModel := preload("res://scripts/broadcast_model.gd")
@@ -17,6 +18,7 @@ const PHASE_NAMES := ["OBSERVATION", "ACTION", "TICK_END"]
 const PERSPECTIVES := ["broadcast", "agent_a"]
 
 var manifest: Dictionary = {}
+var tick_limit := 0
 var broadcast: BroadcastModel
 var agent: AgentModel
 var perspective := "broadcast"
@@ -59,7 +61,6 @@ func load_fixture(dir: String) -> String:
 	for control in _controls:
 		control.set("disabled", not load_error.is_empty())
 	if load_error.is_empty():
-		_timeline.max_value = broadcast.max_tick
 		perspective = "broadcast"
 		_perspective_button.select(0)
 		index = 0
@@ -86,6 +87,7 @@ func _load(dir: String) -> String:
 	if a.has("error"):
 		return a["error"]
 	manifest = candidate
+	tick_limit = int(candidate["match"]["tick_limit"])
 	broadcast = BroadcastModel.new(b["document"])
 	agent = AgentModel.new(a["document"])
 	return ""
@@ -194,8 +196,13 @@ func _refresh() -> void:
 		_title.text = "Agent %s (%s) - delivered information only" % [agent.entrant_id, agent.entrant_name]
 		_caption.text = "Receipt: %s   Opponent activity: %s" % [state["receipt"], agent.opponent_activity]
 		_side.text = _agent_panel(state)
-	_position_label.text = "Tick %d / %d   %s   frame %d / %d" % [tick, model.max_tick, phase, index + 1, model.frame_count()]
+	if perspective == "broadcast":
+		_position_label.text = "Tick %d / %d   %s   frame %d / %d" % [tick, model.max_tick, phase, index + 1, model.frame_count()]
+	else:
+		# No match length or frame total: either would reveal when the match ends.
+		_position_label.text = "Tick %d (limit %d)   %s   step %d" % [tick, tick_limit, phase, index + 1]
 	_syncing_slider = true
+	_timeline.max_value = broadcast.max_tick if perspective == "broadcast" else tick_limit
 	_timeline.value = tick
 	_syncing_slider = false
 	var match_info: Dictionary = manifest["match"]

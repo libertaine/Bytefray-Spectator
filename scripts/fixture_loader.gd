@@ -14,9 +14,10 @@ const SCHEMAS := {
 const REQUIRED_VERIFICATION := [
 	"artifact_pair_consistent",
 	"exchange_reconstructed",
-	"teaching_complete",
+	"outcome_verified",
 	"agent_view_allowlist_checked",
 ]
+const PROVENANCES := ["teaching_demo", "showcase_match"]
 
 
 static func load_manifest(dir: String) -> Dictionary:
@@ -33,6 +34,14 @@ static func load_manifest(dir: String) -> Dictionary:
 	for key in REQUIRED_VERIFICATION:
 		if verification.get(key) != true:
 			return {"error": "manifest does not record a verified match (%s)" % key}
+	var provenance: Variant = verification.get("provenance")
+	if not PROVENANCES.has(provenance):
+		return {"error": "manifest records an unknown provenance"}
+	if provenance == "teaching_demo" and verification.get("teaching_complete") != true:
+		return {"error": "manifest does not record a verified teaching demonstration"}
+	var tick_limit: Variant = manifest.get("match", {}).get("tick_limit")
+	if typeof(tick_limit) not in [TYPE_INT, TYPE_FLOAT] or int(tick_limit) < 1:
+		return {"error": "manifest records no tick limit"}
 	return {"manifest": manifest}
 
 

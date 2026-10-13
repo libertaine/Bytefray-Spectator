@@ -1,0 +1,9 @@
+{
+  "name": "spectator_test_opponent",
+  "display": "Spectator test opponent (quiet)",
+  "description": "Test-only differential opponent: one stationary process that reads its own core.",
+  "kind": "python",
+  "api_version": 2,
+  "entrypoint": "agent.py:create_agent",
+  "version": "1.0.0"
+}

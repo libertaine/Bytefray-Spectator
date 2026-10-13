@@ -1,0 +1,9 @@
+{
+  "name": "spectator_test_opponent",
+  "display": "Spectator test opponent (split)",
+  "description": "Test-only differential opponent: a stationary core reader plus a decoy process parked outside the other side's scans.",
+  "kind": "python",
+  "api_version": 2,
+  "entrypoint": "agent.py:create_agent",
+  "version": "1.0.0"
+}

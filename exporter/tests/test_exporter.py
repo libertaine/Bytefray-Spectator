@@ -60,6 +60,8 @@ def test_manifest_vouches_for_committed_files() -> None:
     assert verification["teaching_complete"] and verification["agent_view_allowlist_checked"]
     assert all(status == "VERIFIED" for _, status in verification["teaching_steps"])
     assert verification["tick_end_boundaries_checked"] == manifest["match"]["ticks"] + 1
+    assert verification["provenance"] == "teaching_demo" and verification["outcome_verified"] is True
+    assert manifest["match"]["tick_limit"] == declaration["config"]["tick_limit"] == 1000
 
 
 def test_reexport_is_byte_identical_and_writes_nothing_into_bytefray(tmp_path: Path) -> None:
@@ -128,18 +130,52 @@ def test_broadcast_final_board_and_alive_set_match_the_replay() -> None:
     assert frames[-1]["t"] == broadcast["result"]["ticks"]
 
 
-def test_export_refuses_a_tampered_source(tmp_path: Path) -> None:
+def _rewrite_json(path: Path, change) -> None:
+    document = json.loads(path.read_text(encoding="utf-8"))
+    change(document)
+    path.write_text(json.dumps(document, indent=2), encoding="utf-8")
+
+
+def _claim_a_won(result: dict) -> None:
+    result["winner"], result["termination_reason"] = "A", "last_agent_standing"
+    for entrant in result["entrants"]:
+        entrant["alive"] = entrant["agent_id"] == "A"
+
+
+def test_export_refuses_a_rewritten_outcome_even_with_rebound_digests(tmp_path: Path) -> None:
+    """The demo sidecar is unsigned: rebinding it must not let a false result through."""
     source = tmp_path / "source"
     shutil.copytree(SOURCE, source)
-    trace = bytearray((source / "trace.jsonl").read_bytes())
-    trace[len(trace) // 2] ^= 1
-    (source / "trace.jsonl").write_bytes(bytes(trace))
-    out = tmp_path / "out"
-    out.mkdir()
-    (out / "manifest.json").write_bytes(b"stale")
-    with pytest.raises(Exception):  # noqa: B017 - any verification failure is a refusal
-        export(BYTEFRAY_ROOT, source, out)
-    assert not (out / "manifest.json").exists()
+    _rewrite_json(source / "result.json", _claim_a_won)
+    digest = sha256_file(source / "result.json")
+    _rewrite_json(source / "demo.json", lambda demo: demo["artifacts"]["result"].update(sha256=digest))
+    with pytest.raises(ExportError, match="match outcome does not verify: result.json outcome equals the replay"):
+        export(BYTEFRAY_ROOT, source, tmp_path / "out")
+    assert not (tmp_path / "out" / "manifest.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("name", "change", "reason"),
+    [
+        ("result.json", _claim_a_won, "Digest mismatch for 'result'"),
+        ("replay.jsonl", None, "Digest mismatch for 'replay'"),
+        ("demo.json", lambda demo: demo["config"].update(max_ticks=999), "tick limit|Digest|demo"),
+    ],
+)
+def test_export_refuses_each_altered_source(tmp_path: Path, name: str, change, reason: str) -> None:
+    source = tmp_path / "source"
+    shutil.copytree(SOURCE, source)
+    if change is None:  # flip one bit of an ownership value, keeping the JSON valid
+        lines = (source / name).read_text(encoding="utf-8").splitlines(keepends=True)
+        at = next(i for i, line in enumerate(lines) if '"memory_diffs":[{' in line)
+        record = json.loads(lines[at])
+        record["memory_diffs"][0]["values"][0] ^= 1
+        lines[at] = json.dumps(record, separators=(",", ":")) + "\n"
+        (source / name).write_text("".join(lines), encoding="utf-8")
+    else:
+        _rewrite_json(source / name, change)
+    with pytest.raises(Exception, match=reason):
+        export(BYTEFRAY_ROOT, source, tmp_path / "out")
 
 
 def _git(cwd: Path, *args: str) -> str:

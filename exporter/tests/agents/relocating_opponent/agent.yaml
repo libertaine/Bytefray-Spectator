@@ -1,0 +1,9 @@
+{
+  "name": "spectator_test_opponent",
+  "display": "Spectator test opponent (relocating)",
+  "description": "Test-only positive control: moves once to a new cell, then stays, so the other side's samples see a different anchor.",
+  "kind": "python",
+  "api_version": 2,
+  "entrypoint": "agent.py:create_agent",
+  "version": "1.0.0"
+}

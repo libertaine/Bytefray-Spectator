@@ -19,15 +19,18 @@ Usage::
 
 from __future__ import annotations
 
+import os
 import sys
 
-# Importing the pinned checkout must not leave __pycache__ files inside it.
+# Importing the pinned checkout must not leave __pycache__ files inside it, and
+# must not execute cached bytecode the pin check never saw: with a prefix that
+# is never created, every module compiles from its verified source.
 sys.dont_write_bytecode = True
+sys.pycache_prefix = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".no-bytecode-cache")
 
 import argparse  # noqa: E402
 import hashlib  # noqa: E402
 import json  # noqa: E402
-import os  # noqa: E402
 import subprocess  # noqa: E402
 from pathlib import Path  # noqa: E402
 from typing import Any  # noqa: E402
@@ -40,7 +43,12 @@ SCHEMA_VERSION = 1
 
 SPECTATOR_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PIN = SPECTATOR_ROOT / "bytefray.pin.json"
-SOURCE_NAMES = ("replay.jsonl", "trace.jsonl", "result.json", "demo.json")
+# A source directory holds one of two provenance records next to the match
+# artifacts: Bytefray's teaching-demo sidecar or a Spectator run record.
+TEACHING_SOURCES = ("replay.jsonl", "trace.jsonl", "result.json", "demo.json")
+SHOWCASE_SOURCES = ("replay.jsonl", "trace.jsonl", "result.json", "match.json")
+SOURCE_NAMES = TEACHING_SOURCES  # the development fixture is a teaching demo
+RUN_SCHEMA = "bytefray.spectator.match_run"
 AGENT_ID = "A"
 PHASE_CODES = {"OBSERVATION": 0, "ACTION": 1, "TICK_END": 2}
 
@@ -146,7 +154,91 @@ def _tick_zero_regions(replay_path: Path) -> dict[str, int]:
     raise ExportError("replay has no tick-0 snapshot")
 
 
-def _broadcast(playback: Any, cursor: Any, core_cells: dict[str, list[int]], result: dict[str, Any]) -> dict[str, Any]:
+def _replay_header_and_terminal(replay_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    with replay_path.open(encoding="utf-8") as handle:
+        lines = [line for line in handle if line.strip()]
+    header, terminal = json.loads(lines[0]), json.loads(lines[-1])
+    if terminal.get("record_type") != "result":
+        raise ExportError("replay has no terminal result record")
+    return header, terminal
+
+
+def verify_outcome(playback: Any, terminal: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    """Re-derive the outcome from verified state and refuse any disagreeing record.
+
+    The final alive set comes from the reconstructed world (checked against every
+    replay snapshot); the replay's terminal result record is bound by the replay
+    digest. result.json must agree with both, and both must follow the engine's
+    rule (process_runtime): one survivor wins by last_agent_standing, none is a
+    tie by all_agents_dead, otherwise tick_limit with the unique top score among
+    the living (else a tie).
+    """
+    final = playback.facts[-1]
+    if final.world_state is None or final.phase.value != "TICK_END":
+        raise ExportError("verified facts do not end on a tick boundary")
+    alive = sorted(final.world_state.alive_entrants)
+    ticks = final.tick
+    tick_limit = int(result["reproducibility"]["tick_limit"])
+    score = terminal["score"]
+    if len(alive) == 1:
+        expected = (alive[0], "last_agent_standing")
+    elif not alive:
+        expected = ("tie", "all_agents_dead")
+    else:
+        top = max(score[entrant] for entrant in alive)
+        leaders = [entrant for entrant in alive if score[entrant] == top]
+        expected = (leaders[0] if len(leaders) == 1 else "tie", "tick_limit")
+    terminal_outcome = (terminal["winner"] or "tie", terminal["termination_reason"])
+    result_outcome = (result["winner"], result["termination_reason"])
+    checks = {
+        "outcome follows the engine rule": terminal_outcome == expected,
+        "result.json outcome equals the replay": result_outcome == terminal_outcome,
+        "tick count": result["ticks"] == terminal["ticks"] == ticks,
+        "tick limit": ticks == tick_limit if expected[1] == "tick_limit" else ticks <= tick_limit,
+        "identity": (result["match_id"], result["result_id"]) == (terminal["match_id"], terminal["result_id"]),
+        "score": result["score"] == score,
+        "alive flags": [(e["agent_id"], e["alive"]) for e in result["entrants"]]
+        == [(a["id"], a["alive"]) for a in terminal["agents"]]
+        == [(e["agent_id"], e["agent_id"] in alive) for e in result["entrants"]],
+    }
+    failed = [name for name, ok in checks.items() if not ok]
+    if failed:
+        raise ExportError(f"match outcome does not verify: {', '.join(failed)}")
+    return {
+        "winner": expected[0],
+        "termination_reason": expected[1],
+        "ticks": ticks,
+        "tick_limit": tick_limit,
+        "alive": alive,
+    }
+
+
+def verify_run_record(
+    run: dict[str, Any], paths: dict[str, Path], pin_record: dict[str, Any], header: dict[str, Any], result: dict[str, Any]
+) -> None:
+    """Check a Spectator run record (match.json) against the artifacts it binds."""
+    config, reproducibility = header["config"], result["reproducibility"]
+    checks = {
+        "schema": (run.get("schema"), run.get("schema_version")) == (RUN_SCHEMA, 1),
+        "pinned commit": run["bytefray"]["commit"] == pin_record["commit"],
+        "artifact digests": run["artifacts"]
+        == {name: sha256_file(paths[name]) for name in ("replay.jsonl", "trace.jsonl", "result.json")},
+        "ruleset": run["ruleset_id"] == result["ruleset_id"],
+        "seed": run["seed"] == config["seed"] == reproducibility["seed"],
+        "arena": run["config"]["arena_size"] == config["arena_size"] == reproducibility["arena_size"],
+        "action budget": run["config"]["action_budget"] == config["instr_per_tick"] == reproducibility["action_budget"],
+        "tick limit": run["config"]["tick_limit"] == reproducibility["tick_limit"],
+        "entrants": [(e["agent_id"], e["name"]) for e in run["entrants"]]
+        == [(e["agent_id"], e["name"]) for e in result["entrants"]],
+    }
+    failed = [name for name, ok in checks.items() if not ok]
+    if failed:
+        raise ExportError(f"match.json does not verify: {', '.join(failed)}")
+
+
+def _broadcast(
+    playback: Any, cursor: Any, core_cells: dict[str, list[int]], result: dict[str, Any], outcome: dict[str, Any]
+) -> dict[str, Any]:
     facts = playback.facts
     if len(cursor.positions) != len(facts):
         raise ExportError("broadcast positions do not match the verified facts")
@@ -200,9 +292,9 @@ def _broadcast(playback: Any, cursor: Any, core_cells: dict[str, list[int]], res
         "arena_size": playback.arena_size,
         "entrants": entrants,
         "result": {
-            "termination_reason": result["termination_reason"],
-            "ticks": result["ticks"],
-            "winner": result["winner"],
+            "termination_reason": outcome["termination_reason"],
+            "ticks": outcome["ticks"],
+            "winner": outcome["winner"],
         },
         "phase_codes": PHASE_CODES,
         "frames": frames,
@@ -330,29 +422,44 @@ def export(bytefray_root: Path, source_dir: Path, out_dir: Path, pin_path: Path 
     from battle_engine.rules import BYTEFRAY_RULESET_V6_ALPHA1_ID
     from battle_engine.sensing_playback import reconstruct_sensing_playback, verify_demonstration_artifacts
 
-    paths = {name: source_dir / name for name in SOURCE_NAMES}
+    teaching = (source_dir / "demo.json").exists()
+    if teaching == (source_dir / "match.json").exists():
+        raise ExportError("source needs exactly one provenance record: demo.json or match.json")
+    paths = {name: source_dir / name for name in (TEACHING_SOURCES if teaching else SHOWCASE_SOURCES)}
     for name, path in paths.items():
         if not path.is_file():
             raise ExportError(f"missing source artifact {name}")
     sources = {name: {"sha256": sha256_file(path), "bytes": path.stat().st_size} for name, path in paths.items()}
 
-    verify_demonstration_artifacts(paths["demo.json"])
+    result = json.loads(paths["result.json"].read_text(encoding="utf-8"))
+    header, terminal = _replay_header_and_terminal(paths["replay.jsonl"])
+    if teaching:
+        demo = verify_demonstration_artifacts(paths["demo.json"])
+        if demo["payload"]["config"]["max_ticks"] != result["reproducibility"]["tick_limit"]:
+            raise ExportError("demo.json tick limit does not match result.json")
+    else:
+        verify_run_record(json.loads(paths["match.json"].read_text(encoding="utf-8")), paths, pin_record, header, result)
     playback = reconstruct_sensing_playback(
-        paths["replay.jsonl"], paths["trace.jsonl"], result_path=paths["result.json"], demo_path=paths["demo.json"]
+        paths["replay.jsonl"],
+        paths["trace.jsonl"],
+        result_path=paths["result.json"],
+        demo_path=paths["demo.json"] if teaching else None,
     )
     if playback.ruleset_id != BYTEFRAY_RULESET_V6_ALPHA1_ID:
         raise ExportError(f"unsupported ruleset {playback.ruleset_id}")
-    result = json.loads(paths["result.json"].read_text(encoding="utf-8"))
+    outcome = verify_outcome(playback, terminal, result)
     session = ReplaySession()
     session.load(paths["replay.jsonl"])
 
     broadcast_cursor = SensingCursor(playback, session, None)
     report = broadcast_cursor.verification_report()
-    if not (report.artifact_pair_consistent and report.exchange_reconstructed and report.teaching_complete):
+    if not (report.artifact_pair_consistent and report.exchange_reconstructed):
         raise ExportError("match did not verify")
+    if teaching and not report.teaching_complete:
+        raise ExportError("teaching demonstration did not verify")
     regions = _tick_zero_regions(paths["replay.jsonl"])
     core_cells = {entrant: list(core_addresses(start, playback.arena_size)) for entrant, start in regions.items()}
-    broadcast = _broadcast(playback, broadcast_cursor, core_cells, result)
+    broadcast = _broadcast(playback, broadcast_cursor, core_cells, result, outcome)
     agent_name = next(e["name"] for e in result["entrants"] if e["agent_id"] == AGENT_ID)
     agent = _agent(SensingCursor(playback, session, AGENT_ID), agent_name)
 
@@ -386,18 +493,27 @@ def export(bytefray_root: Path, source_dir: Path, out_dir: Path, pin_path: Path 
             "ruleset_id": playback.ruleset_id,
             "arena_size": playback.arena_size,
             "seed": result["reproducibility"]["seed"],
-            "ticks": result["ticks"],
-            "termination_reason": result["termination_reason"],
-            "winner": result["winner"],
+            "tick_limit": outcome["tick_limit"],
+            "ticks": outcome["ticks"],
+            "termination_reason": outcome["termination_reason"],
+            "winner": outcome["winner"],
         },
         "sources": sources,
         "verification": {
+            "provenance": "teaching_demo" if teaching else "showcase_match",
             "artifact_pair_consistent": report.artifact_pair_consistent,
             "exchange_reconstructed": report.exchange_reconstructed,
-            "teaching_complete": report.teaching_complete,
-            "teaching_steps": [[name, status.value] for name, status in report.teaching_steps],
+            "outcome_verified": True,
             "tick_end_boundaries_checked": tick_ends,
             "agent_view_allowlist_checked": True,
+            **(
+                {
+                    "teaching_complete": report.teaching_complete,
+                    "teaching_steps": [[name, status.value] for name, status in report.teaching_steps],
+                }
+                if teaching
+                else {}
+            ),
         },
         "presentation": presentation,
     }
@@ -408,7 +524,7 @@ def export(bytefray_root: Path, source_dir: Path, out_dir: Path, pin_path: Path 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--bytefray-root", type=Path, required=True)
-    parser.add_argument("--source", type=Path, required=True, help="directory with replay/trace/result/demo")
+    parser.add_argument("--source", type=Path, required=True, help="replay/trace/result plus demo.json or match.json")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--pin", type=Path, default=DEFAULT_PIN)
     args = parser.parse_args(argv)

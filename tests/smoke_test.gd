@@ -79,6 +79,7 @@ func _run(main: Node) -> void:
 	var alive: Array = ring.state["alive"]
 	check(alive.size() == 2, "both entrants alive at the end of the dev fixture (tick limit)")
 	check(main._side.text.contains("Result: tie"), "broadcast shows the result at the end")
+	check(int(main._timeline.max_value) == main.broadcast.max_tick, "broadcast timeline spans the recorded match")
 
 	# Agent A: traverse every frame; the view may only hold agent-visible state.
 	main.set_perspective("agent_a")
@@ -98,6 +99,10 @@ func _run(main: Node) -> void:
 	check(processes_ok, "agent perspective shows only its own process")
 	check(not main._side.text.contains("Result:"), "agent perspective does not show the match result")
 	check(not main._title.text.contains("Broadcast"), "agent perspective title")
+	# Only the public tick limit, never the match length or a frame total.
+	var label: String = main._position_label.text
+	check(label.contains("(limit %d)" % main.tick_limit) and not label.contains("/"), "agent position label: %s" % label)
+	check(int(main._timeline.max_value) == main.tick_limit, "agent timeline spans the public tick limit")
 
 	# Perspective round trip on a tick boundary.
 	main.seek_tick(500)

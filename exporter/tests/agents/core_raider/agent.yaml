@@ -1,0 +1,9 @@
+{
+  "name": "spectator_test_raider",
+  "display": "Spectator test raider",
+  "description": "Test-only: overwrites the eight cells 91-98 ahead of its anchor, one per callback, to produce a short decisive match.",
+  "kind": "python",
+  "api_version": 2,
+  "entrypoint": "agent.py:create_agent",
+  "version": "1.0.0"
+}

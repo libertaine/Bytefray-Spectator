@@ -18,10 +18,12 @@ Status: **P0-B development vertical slice**. Local repository only.
 | `bytefray.pin.json` | The Bytefray commit and packages the exporter must import |
 | `exporter/spectator_export.py` | Read-only exporter: match artifacts → `broadcast.json`, `agent_a.json`, `manifest.json` |
 | `exporter/make_dev_fixture.py` | Regenerates the development fixture from the pinned Bytefray |
-| `exporter/tests/` | Exporter and fixture tests (pytest) |
+| `exporter/run_match.py` | Runs one alpha1 match between two agent directories (seeded placement) and writes a `match.json` run record |
+| `exporter/tests/` | Exporter, fixture and differential knowledge-isolation tests (pytest); `agents/` holds test-only opponents |
 | `fixtures/dev/` | `fixture.json` declaration, `source/` match artifacts, `presentation/` exported files |
 | `project.godot`, `scenes/`, `scripts/` | Godot viewer |
 | `tests/smoke_test.gd` | Headless playback smoke test |
+| `tests/agent_view_trace.gd` | Records everything the Agent A perspective shows (used by the differential tests) |
 | `docs/` | Phase records |
 
 ## Perspectives and information boundaries
@@ -43,7 +45,14 @@ Status: **P0-B development vertical slice**. Local repository only.
   The exporter fails closed if this file carries any key outside an
   allowlist. The viewer keeps the two perspectives in separate models.
   Switching perspective maps the position on tick boundaries only, never a
-  global decision index.
+  global decision index. The Agent A perspective shows the public tick limit,
+  never the match length.
+
+The outcome shown (winner, termination, eliminations) is re-derived from the
+verified final state and the replay's terminal record; a `result.json` that
+disagrees is refused. A source directory carries exactly one provenance
+record: Bytefray's teaching-demo `demo.json`, or a Spectator `match.json`
+written by `run_match.py`.
 
 ## Requirements
 
@@ -67,8 +76,13 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 & $py exporter/make_dev_fixture.py --bytefray-root D:\Projects\BATTLE2
 & $py exporter/spectator_export.py --bytefray-root D:\Projects\BATTLE2 --source fixtures/dev/source --out fixtures/dev/presentation
 
-# Exporter tests (about 2.5 minutes; includes a full re-export)
-& $py -m pytest
+# Run a match between two agent directories (output outside the Bytefray checkout)
+& $py exporter/run_match.py --bytefray-root D:\Projects\BATTLE2 --agent-a <dir> --agent-b <dir> --seed <n> --out <new dir>
+
+# Exporter and isolation tests (about 3.5 minutes; includes a full re-export and the
+# Godot differential traces). The OS-default pytest temp root is unreadable on the
+# dev machine, so pass a disposable basetemp.
+& $py -m pytest --basetemp=D:\Projects\Bytefray-Spectator-work\pytest
 
 # Viewer: first-time import, headless smoke test, interactive run
 & $godot --headless --path . --import
