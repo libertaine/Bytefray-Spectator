@@ -188,11 +188,12 @@ def test_viewer_agent_perspective_is_identical_under_unobserved_activity(traces:
         "switch",
     }
     assert all(line.split("|")[1] == "agent_a" for line in traces["quiet"])
+    # P1: the agent's own indicators and the static legend are recorded; the ring holds no broadcast
+    # effects. (The footer and key hint contain "|", so later fields are matched by content.)
+    legend = r"Own core location (ownership not delivered)\nOwn process and its reach"
     for line in traces["quiet"]:
-        fields = line.split("|")
-        # P1: the agent's own indicators and the static legend are recorded; the ring holds no broadcast effects.
-        assert '"own_actions":' in fields[8] and fields[10].startswith("Own core location") and fields[11] == "[{},[]]"
-    own = [json.loads(line.split("|")[8])["own_actions"] for line in traces["quiet"]]
+        assert '"own_actions":' in line and f"|{legend}" in line and "|[{},[]]|" in line
+    own = [json.loads(re.search(r'"own_actions":(\{.*?\]\})', line).group(1)) for line in traces["quiet"]]
     assert any(o["writes"] for o in own) and any(o["moves"] for o in own) and any(o["pending_senses"] for o in own)
 
 
