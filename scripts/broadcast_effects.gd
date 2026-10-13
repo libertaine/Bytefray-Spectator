@@ -104,7 +104,7 @@ func _action_record(i: int, frame: Dictionary, previous: Dictionary, owners: Pac
 		"address": -1 if frame["address"] == null else int(frame["address"]),
 		"source": _anchor(previous, actor, process),
 		"outcome": "applied" if applied else "refused",
-		"core_owner": -1, "core_change": "", "hits": [], "decisive": false,
+		"core_owner": -1, "core_change": "", "hits": [], "decisive_from": -1,
 		"from": -1, "delta": 0, "sensed": null, "delivered": -1, "receiver": -1,
 	}
 	if kind == "write" and applied:
@@ -155,7 +155,9 @@ func _end_of_tick(i: int, frame: Dictionary, owners: PackedInt32Array) -> void:
 
 
 ## For each eliminated entrant, the last recorded WRITE that took one of its
-## core cells at or before its elimination is the decisive capture.
+## core cells before its elimination is the decisive capture. It is shown as
+## decisive only from the elimination's TICK_END frame on, so no frame before
+## the recorded elimination implies it.
 func _mark_decisive() -> void:
 	for event in tick_events:
 		for entrant in event["eliminated"]:
@@ -163,7 +165,7 @@ func _mark_decisive() -> void:
 			for k in range(actions.size() - 1, -1, -1):
 				var action: Dictionary = actions[k]
 				if int(action["i"]) < int(event["i"]) and action["core_owner"] == e and action["core_change"] == "damage":
-					action["decisive"] = true
+					action["decisive_from"] = int(event["i"])
 					break
 
 
@@ -199,7 +201,9 @@ func at(index: int) -> Dictionary:
 			continue  # drawn as a sample below
 		shown.append(_shown(action, tick, index))
 	var senses: Array = []
-	for k in range(_sense_frames.bsearch(index - _sense_span), _sense_frames.size()):
+	# A sample shown at `index` was delivered in the window or is still pending, so
+	# its SENSE frame is at most _sense_span frames before the window start.
+	for k in range(_sense_frames.bsearch(_window_start(tick) - _sense_span), _sense_frames.size()):
 		if _sense_frames[k] > index:
 			break
 		var sense: Dictionary = actions[_sense_actions[k]]
@@ -212,6 +216,10 @@ func at(index: int) -> Dictionary:
 			if age >= EFFECT_TICKS:
 				continue
 		var shown_sense := _shown(sense, tick, index)
+		if state == "pending":
+			# Where and when it will be delivered is a later frame: not handed over yet.
+			shown_sense["delivered"] = -1
+			shown_sense["receiver"] = -1
 		shown_sense["state"] = state
 		shown_sense["age"] = age if state == "delivered" else 0
 		shown_sense["current"] = int(sense["i"]) == index or delivered == index
@@ -231,15 +239,29 @@ func _shown(action: Dictionary, tick: int, index: int) -> Dictionary:
 	var shown := action.duplicate()
 	shown["age"] = tick - int(action["t"])
 	shown["current"] = int(action["i"]) == index
+	shown["decisive"] = int(action["decisive_from"]) >= 0 and index >= int(action["decisive_from"])
+	shown.erase("decisive_from")
 	return shown
 
 
-## The recorded action at `index`, or {} for an OBSERVATION/TICK_END frame.
+## The recorded action at `index` as shown there, or {} for an
+## OBSERVATION/TICK_END frame.
 func action_at(index: int) -> Dictionary:
 	var k := _action_frames.bsearch(index)
 	if k < actions.size() and _action_frames[k] == index:
-		return actions[k]
+		return _shown(actions[k], _model.tick_of(index), index)
 	return {}
+
+
+## At an elimination's TICK_END frame, its decisive captures, else [].
+func decisive_at(index: int) -> Array:
+	var out: Array = []
+	if not _model.is_tick_end(index):
+		return out
+	for action in actions:
+		if int(action["decisive_from"]) == index:
+			out.append(_shown(action, _model.tick_of(index), index))
+	return out
 
 
 ## The SENSE whose sample is delivered at OBSERVATION frame `index`, or {}.

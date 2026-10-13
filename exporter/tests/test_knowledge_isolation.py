@@ -185,6 +185,7 @@ def test_viewer_agent_perspective_is_identical_under_unobserved_activity(traces:
         "jump",
         "play",
         "play-slow",
+        "play-switch",
         "switch",
     }
     assert all(line.split("|")[1] == "agent_a" for line in traces["quiet"])

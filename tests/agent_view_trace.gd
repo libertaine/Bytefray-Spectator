@@ -9,9 +9,10 @@ extends SceneTree
 ## broadcast effects or core gauges the ring holds) after a viewer operation:
 ## stepping every frame, stepping ticks backwards, seeking every tick, dragging
 ## the timeline, End, the jump-to-tick box, playing at a fixed frame rate (fast,
-## and slowly through every frame of a tick), and switching in from every
-## broadcast frame. Switching lines are run-length collapsed, because how many
-## broadcast frames map to one agent position is broadcast data, not agent data.
+## and slowly through every frame of a tick), switching in from Broadcast
+## while it plays, and switching in from every broadcast frame. Switching lines
+## are run-length collapsed, because how many broadcast frames map to one agent
+## position is broadcast data, not agent data.
 
 var _main: Node
 var _frame := 0
@@ -91,6 +92,19 @@ func _record(lines: PackedStringArray) -> void:
 		m._process(1.0 / 240.0)
 		lines.append(_observe("play-slow"))
 	m.set_playing(false)
+	# Switch in from Broadcast while it plays (mid-tick), then keep playing.
+	for start in [0, 1, 5, 40]:
+		m.set_perspective("broadcast")
+		m.seek_tick(start)
+		m.ticks_per_second = 1.0
+		m.set_playing(true)
+		for i in 100:
+			m._process(1.0 / 240.0)
+		m.set_perspective("agent_a")
+		for i in 300:
+			m._process(1.0 / 240.0)
+			lines.append(_observe("play-switch"))
+		m.set_playing(false)
 	var last := ""
 	m.set_perspective("broadcast")
 	for i in range(m.broadcast.frame_count()):

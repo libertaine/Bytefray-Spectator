@@ -135,8 +135,10 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 
 The timeline slider seeks by tick. A key hint line is always shown.
 
-Playback passes through every recorded frame of each tick, spread evenly over
-that tick's share of time, so the order of actions within a tick is visible.
+Playback gives every recorded frame of a tick an equal, in-order share of that
+tick's time. At 1–2 ticks/s each action of a tick appears in turn; at faster
+speeds a display frame can span several recorded frames, and the 3-tick
+effects carry the actions.
 While playing, the broadcast caption holds the summary of the last completed
 tick; paused or stepping, it describes the current recorded fact and its
 recorded outcome.
@@ -156,7 +158,10 @@ Seeking, restarting or switching perspective therefore redraws the effects
 from the record, and nothing stale can remain. Core cards show each entrant's
 core cells held, the change since the last tick boundary, and a CRITICAL
 (2 or fewer) or ELIMINATED level. The decisive capture is marked on the WRITE
-that took the last core cell, and stays drawn alongside the result banner.
+that took the last core cell from the recorded elimination (the tick end where
+the banner appears) on, and stays drawn alongside the result banner. Before
+that frame the WRITE is shown as a core cell lost and the gauge reads 0/8,
+because the record has not yet said the entrant is eliminated.
 
 In Broadcast, an eliminated entrant's process markers are dimmed and crossed
 out, the tick-end caption names the entrant eliminated in that tick, and the

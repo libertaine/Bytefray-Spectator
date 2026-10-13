@@ -10,7 +10,7 @@ const RingView := preload("res://scripts/ring_view.gd")
 const BROADCAST := [
 	["owned", "Cells owned by A / B"],
 	["core", "Core cells: bright = held, dark = lost"],
-	["markers", "Process; hollow = hit by an opponent WRITE this tick"],
+	["markers", "Process; hollow = hit by an opponent WRITE last tick"],
 	["pending", "SENSE sample taken, not yet delivered"],
 	["delivered", "Sample delivered to its process"],
 	["writes", "WRITE: filled = took the cell, ring = owner unchanged"],

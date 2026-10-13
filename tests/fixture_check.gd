@@ -17,7 +17,8 @@ extends SceneTree
 ## with their recorded fields and outcomes; every SENSE sample is pending until
 ## its recorded delivery and delivered from then on; tick-end disruptions are
 ## the recorded sets and agree with the WRITEs that hit an anchor; core gauges
-## equal an independent count; the decisive capture precedes the result.
+## equal an independent count; no shown effect carries data from a later frame;
+## the decisive capture is marked from the recorded elimination on.
 ## Agent A's own indicators equal a reference built from agent_a.json alone,
 ## and Agent A never holds broadcast effects. After random seeks, restarts,
 ## jumps, switches and playback, the drawn effects equal those of sequential
@@ -184,6 +185,7 @@ func _run(main: Node) -> void:
 	check(main.current_tick() == middle and main.current_model().is_tick_end(main.index), "mid-tick switch lands on the last boundary")
 
 	_check_navigation(main, broadcast_hashes, agent_hashes)
+	_check_switch_while_playing(main)
 	_check_playback_order(main, mini(10, ticks - 1))
 
 	# Playback at a fixed rate, stopping at the end, in both perspectives.
@@ -269,12 +271,16 @@ func _broadcast_reference(model) -> Dictionary:
 			2:
 				tick_end[t] = j
 	var span := 0
+	var eliminated_by := frames.size()
 	for j in frames.size():
 		if int(frames[j]["p"]) == 1 and frames[j]["kind"] == "sense" and frames[j]["status"] == "APPLIED":
 			span = maxi(span, int(deliveries.get(j, frames.size())) - j)
+		if j > 0 and (frames[j]["alive"] as Array).size() < (frames[j - 1]["alive"] as Array).size():
+			eliminated_by = mini(eliminated_by, j)
 	return {
 		"frames": frames, "tick_start": tick_start, "tick_end": tick_end, "previous_owner": previous_owner,
 		"deliveries": deliveries, "unpaired": unpaired, "held": held, "core_of": core_of, "span": span,
+		"eliminated_by": eliminated_by,
 	}
 
 
@@ -304,8 +310,11 @@ func _check_broadcast_frame(main: Node, reference: Dictionary, i: int, first: Ar
 	else:
 		ok = holds(ok, current.is_empty(), first, "frame %d: no action outside ACTION frames" % i)
 	# SENSE samples: pending until the recorded delivery, then delivered for the window.
+	# Any SENSE delivered in the window or still pending is at most `span` frames
+	# before the window start; every 97th frame the whole record is scanned instead.
+	var scan_from := 0 if i % 97 == 0 else maxi(0, _window_start(reference, tick) - int(reference["span"]))
 	var expected_senses: Array = []
-	for j in range(maxi(0, i - int(reference["span"])), i + 1):
+	for j in range(scan_from, i + 1):
 		var f: Dictionary = frames[j]
 		if int(f["p"]) != 1 or f["kind"] != "sense" or f["status"] != "APPLIED":
 			continue
@@ -316,6 +325,12 @@ func _check_broadcast_frame(main: Node, reference: Dictionary, i: int, first: Ar
 			expected_senses.append([j, "delivered"])
 	var senses: Array = (ring.effects["senses"] as Array).map(func(s: Dictionary) -> Array: return [int(s["i"]), s["state"]])
 	ok = holds(ok, senses == expected_senses, first, "frame %d: senses %s, expected %s" % [i, senses, expected_senses])
+	# Nothing shown carries a later frame: no delivery data while pending, no
+	# decisive mark before the recorded elimination.
+	for sense in ring.effects["senses"]:
+		ok = holds(ok, sense["state"] == "delivered" or (int(sense["delivered"]) == -1 and int(sense["receiver"]) == -1), first, "frame %d: a pending sample carries its future delivery" % i)
+	for action in ring.effects["actions"]:
+		ok = holds(ok, not action.has("decisive_from") and (not action["decisive"] or int(reference["eliminated_by"]) <= i), first, "frame %d: decisive shown before the recorded elimination" % i)
 	for sense in ring.effects["senses"]:
 		var f: Dictionary = frames[int(sense["i"])]
 		var good: bool = sense["actor"] == f["actor"] and sense["process"] == f["process"] and int(sense["address"]) == int(f["address"]) and sense["sensed"] == f["sensed"]
@@ -419,7 +434,7 @@ func _check_disruption_hits(main: Node, reference: Dictionary) -> void:
 
 
 func _check_decisive(main: Node, reference: Dictionary, match_info: Dictionary) -> void:
-	var decisive: Array = main.effects.actions.filter(func(a: Dictionary) -> bool: return a["decisive"])
+	var decisive: Array = main.effects.actions.filter(func(a: Dictionary) -> bool: return int(a["decisive_from"]) >= 0)
 	if String(match_info["termination_reason"]) != "last_agent_standing":
 		check(decisive.is_empty(), "no decisive capture without an elimination")
 		return
@@ -433,12 +448,16 @@ func _check_decisive(main: Node, reference: Dictionary, match_info: Dictionary) 
 	var i := int(action["i"])
 	check(action["actor"] == winner and int(action["core_owner"]) == loser and action["core_change"] == "damage", "the decisive capture is the winner's WRITE on the loser's core")
 	check(int(reference["held"][i][loser]) == 0 and i < last, "the loser's core is 0/8 after the decisive WRITE, before the final frame")
+	check(int(action["decisive_from"]) == int(reference["eliminated_by"]) and int(reference["eliminated_by"]) == last, "it is marked decisive from the recorded elimination frame")
 	main.seek_tick(int(match_info["ticks"]))
 	main.step_frame(-(last - i))
-	check(main.index == i and main._caption.text.contains("DECISIVE CAPTURE") and main._ring.banner == "", "the decisive WRITE is captioned before the result banner appears")
+	var at_write: Array = (main._ring.effects["actions"] as Array).filter(func(a: Dictionary) -> bool: return int(a["i"]) == i)
+	check(main.index == i and main._ring.banner == "" and main._caption.text.contains("core cell lost") and not main._caption.text.contains("DECISIVE"), "at the WRITE, before the elimination is recorded, it is shown as a core cell lost, not yet decisive: %s" % main._caption.text)
+	check(at_write.size() == 1 and not at_write[0]["decisive"] and int(main._ring.cores[loser]["held"]) == 0, "at the WRITE the loser's gauge already reads 0/8")
 	main.seek_tick(int(match_info["ticks"]))
 	var shown: Array = (main._ring.effects["actions"] as Array).filter(func(a: Dictionary) -> bool: return a["decisive"])
-	check(main._ring.banner != "" and shown.size() == 1, "the decisive capture is still drawn alongside the result banner")
+	check(main._ring.banner != "" and shown.size() == 1 and int(shown[0]["i"]) == i, "the decisive capture is drawn alongside the result banner")
+	check(main._caption.text.contains("decisive capture: %s/%s WRITE %d" % [action["actor"], action["process"], int(action["address"])]), "the elimination caption names the decisive capture: %s" % main._caption.text)
 
 
 func _write_core_log(main: Node, reference: Dictionary) -> void:
@@ -532,7 +551,7 @@ func _check_navigation(main: Node, broadcast_hashes: Dictionary, agent_hashes: D
 	var ok := true
 	var first: Array = []
 	for n in 400:
-		var op := rng.randi_range(0, 8)
+		var op := rng.randi_range(0, 9)
 		match op:
 			0:
 				main.seek_tick(rng.randi_range(0, main.tick_limit + 5))
@@ -556,12 +575,50 @@ func _check_navigation(main: Node, broadcast_hashes: Dictionary, agent_hashes: D
 				main.set_playing(false)
 			8:
 				main._timeline.value = rng.randi_range(0, int(main._timeline.max_value))
+			9:
+				main.ticks_per_second = main.SPEEDS[rng.randi_range(0, 3)]
+				main.set_playing(true)
+				for k in rng.randi_range(1, 8):
+					main._process(1.0 / 60.0)
+				main.set_perspective("agent_a" if main.perspective == "broadcast" else "broadcast")
+				for k in rng.randi_range(0, 8):
+					main._process(1.0 / 60.0)
+				main.set_playing(false)
 		var ring: Control = main._ring
 		if main.perspective == "broadcast":
 			ok = holds(ok, _effects_hash(ring) == broadcast_hashes[main.index], first, "op %d (%d): broadcast effects at %d differ from sequential stepping" % [n, op, main.index])
 		else:
 			ok = holds(ok, ring.effects.is_empty() and ring.cores.is_empty() and JSON.stringify(ring.state).md5_text() == agent_hashes[main.index], first, "op %d (%d): agent view at %d differs from sequential stepping" % [n, op, main.index])
 	check(ok, "after 400 random navigation operations nothing stale is drawn: %s" % [first])
+
+
+## Switching perspective during playback resumes from the new perspective's
+## boundary with no progress carried over from the other perspective's frames,
+## from every mid-tick frame of the first ticks (where indexes of the two
+## perspectives can coincide).
+func _check_switch_while_playing(main: Node) -> void:
+	for source in ["agent_a", "broadcast"]:
+		var target: String = "broadcast" if source == "agent_a" else "agent_a"
+		var ok := true
+		var first: Array = []
+		main.set_perspective(source)
+		var model = main.current_model()
+		for a in range(1, mini(400, model.frame_count())):
+			if model.is_tick_end(a):
+				continue
+			main.set_playing(false)
+			main.set_perspective(source)
+			main.index = a
+			main._refresh()
+			main.ticks_per_second = 1.0
+			main.set_playing(true)
+			main._process(0.0)
+			main.set_perspective(target)
+			var boundary: int = main.index
+			main._process(0.0001)
+			ok = holds(ok, main.index == boundary, first, "%s index %d -> %s: resumed at %d, not the boundary %d" % [source, a, target, main.index, boundary])
+		main.set_playing(false)
+		check(ok, "switching %s -> %s during playback resumes at the boundary: %s" % [source, target, first])
 
 
 ## At a slow rate, playback visits every frame of a tick, in order, in both perspectives.

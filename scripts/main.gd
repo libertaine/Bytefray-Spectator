@@ -7,9 +7,11 @@ extends Control
 ## agent perspective cannot be positioned by hidden opponent activity. The agent
 ## perspective shows only the public tick limit, never when the match ends.
 ##
-## Playback passes through every recorded frame of a tick, spread evenly over
-## that tick's share of time, so the order of actions within a tick is visible.
-## Each perspective is paced by its own frames only.
+## Playback gives every recorded frame of a tick an equal, in-order share of
+## that tick's time, so at slow speeds each action of a tick appears in turn.
+## (At faster speeds a display frame can span several recorded frames; the
+## effects persist for 3 ticks, so the ring still shows them.) Each
+## perspective is paced by its own frames only.
 ##
 ## Launch options (after `--`): --fixture=showcase|dev|<dir> (default
 ## showcase), --perspective=broadcast|agent_a, --tick=<n>, --speed=<ticks/s>
@@ -54,8 +56,9 @@ const HELP := """Keyboard
   L                      Show or hide the legend
   H or F1                Show or hide this help
 
-Playback passes through every recorded action of each tick, in order.
-Effects fade over 3 ticks; any seek redraws them from the record."""
+Playback gives every recorded action of a tick an equal, in-order share
+of its time: at 1-2 ticks/s each one appears in turn. Effects fade over
+3 ticks; any seek redraws them from the record."""
 
 var manifest: Dictionary = {}
 var tick_limit := 0
@@ -139,6 +142,7 @@ func load_fixture(dir: String) -> String:
 	effects = null
 	agent = null
 	manifest = {}
+	_play_index = -1
 	load_error = _load(dir)
 	for control in _controls:
 		control.set("disabled", not load_error.is_empty())
@@ -200,16 +204,19 @@ func set_perspective(target: String) -> void:
 	perspective = target
 	_perspective_button.select(PERSPECTIVES.find(target))
 	index = current_model().index_for_tick_end(boundary)
+	_play_index = -1  # resume playback from this boundary, paced by this perspective
 	_refresh()
 
 
 func restart() -> void:
 	index = 0
+	_play_index = -1
 	_refresh()
 
 
 func step_frame(delta: int) -> void:
 	index = clampi(index + delta, 0, frame_count() - 1)
+	_play_index = -1
 	_refresh()
 
 
@@ -220,6 +227,7 @@ func step_tick(delta: int) -> void:
 
 func seek_tick(tick: int) -> void:
 	index = current_model().index_for_tick_end(tick)
+	_play_index = -1
 	_refresh()
 
 
@@ -371,6 +379,8 @@ func _broadcast_caption() -> String:
 func frame_caption(at: int) -> String:
 	var text := broadcast.caption(at)
 	if broadcast.is_tick_end(at):
+		for action in effects.decisive_at(at):
+			text += "  -  decisive capture: %s/%s WRITE %d" % [action["actor"], action["process"], int(action["address"])]
 		var summary := summary_text(effects.tick_summary(at))
 		return text + ("  -  " + summary if summary != "" else "")
 	var action := effects.action_at(at)
