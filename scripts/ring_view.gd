@@ -15,6 +15,10 @@ const ENTRANT_COLORS: Array[Color] = [
 	Color("#3fb6ff"), Color("#ff9f43"), Color("#c18bff"), Color("#5be37d"),
 ]
 const UNOWNED := Color(0.20, 0.21, 0.25)
+const FILLED_UNOWNED := Color("#191a1f")
+const MEMORY_DEPTH := 40.0
+const RENDER_MODES := ["classic", "filled_arcs"]
+const BACKGROUND := Color(0.07, 0.07, 0.09)
 const UNKNOWN := Color(0.14, 0.14, 0.17)
 const SAMPLE_COLORS := {
 	"POSITIVE": Color("#ffd166"),
@@ -26,6 +30,11 @@ const RECOVERY := Color("#f2f2f2")
 const CRITICAL := Color("#ff4040")
 ## Opacity of an effect by its age in ticks (0 = the current tick).
 const AGE_ALPHA: Array[float] = [1.0, 0.5, 0.25]
+
+var rendering_mode := "filled_arcs"
+# Geometry only: never cache ownership, colours or broadcast effects here.
+var _wedge_geometry: Array[PackedVector2Array] = []
+var _geometry_key: Array = []
 
 var mode := ""
 var arena_size := 512
@@ -71,6 +80,110 @@ func clear() -> void:
 	queue_redraw()
 
 
+func set_rendering_mode(value: String) -> void:
+	if RENDER_MODES.has(value):
+		rendering_mode = value
+		queue_redraw()
+
+
+## Same outer edge as Classic's stroke; depth extends inward only. All existing
+## core, process, sensing and action coordinates still use radius and width.
+func memory_outer_radius(radius: float, width: float) -> float:
+	return radius + width * 0.5
+
+
+func memory_inner_radius(radius: float, width: float) -> float:
+	return maxf(0.0, memory_outer_radius(radius, width) - MEMORY_DEPTH)
+
+
+## Full address interval [cell, cell + 1], with shared edges and no gap.
+## Subdivide for small arenas too, keeping each curve step at most one degree.
+func cell_polygon(center: Vector2, radius: float, width: float, cell: int) -> PackedVector2Array:
+	var outer := memory_outer_radius(radius, width)
+	var inner := memory_inner_radius(radius, width)
+	var steps := maxi(1, int(ceil(360.0 / arena_size)))
+	var points := PackedVector2Array()
+	for k in range(steps + 1):
+		points.append(_at(center, outer, cell + float(k) / steps))
+	for k in range(steps, -1, -1):
+		points.append(_at(center, inner, cell + float(k) / steps))
+	return points
+
+
+func _prepare_geometry(center: Vector2, radius: float, width: float) -> void:
+	var key := [center, radius, width, arena_size]
+	if key == _geometry_key:
+		return
+	_geometry_key = key
+	_wedge_geometry.clear()
+	for cell in arena_size:
+		_wedge_geometry.append(cell_polygon(center, radius, width, cell))
+
+
+## Broadcast-only flashes; newest recorded take wins at an address. A flash
+## brightens the CURRENT owner, never carries a prior owner's colour forward.
+## The three tick ages match existing effects and reconstruct on every seek.
+func ownership_flashes() -> Dictionary:
+	var flashes := {}
+	if mode != "broadcast":
+		return flashes
+	var owners: PackedInt32Array = state["owners"]
+	for action in effects.get("actions", []):
+		if action["kind"] != "write" or action["outcome"] != "took":
+			continue
+		var cell := int(action["address"])
+		var age := int(action["age"])
+		if cell >= 0 and cell < arena_size and age >= 0 and age < AGE_ALPHA.size() and owners[cell] == int(action["entrant"]):
+			flashes[cell] = _alpha(age)
+	return flashes
+
+
+func memory_color(cell: int, flashes: Dictionary) -> Color:
+	if mode != "broadcast":
+		return UNKNOWN
+	var code: int = state["owners"][cell]
+	if code < 0:
+		return FILLED_UNOWNED if rendering_mode == "filled_arcs" else UNOWNED
+	var color := ENTRANT_COLORS[code % ENTRANT_COLORS.size()].darkened(0.35)
+	return color.lightened(0.55 * float(flashes.get(cell, 0.0))) if rendering_mode == "filled_arcs" else color
+
+
+func _draw_memory(center: Vector2, radius: float, width: float) -> void:
+	var flashes := ownership_flashes() if rendering_mode == "filled_arcs" else {}
+	if rendering_mode == "classic":
+		for cell in arena_size:
+			_cell_arc(center, radius, cell, memory_color(cell, flashes), width)
+		return
+	_prepare_geometry(center, radius, width)
+	for cell in arena_size:
+		draw_colored_polygon(_wedge_geometry[cell], memory_color(cell, flashes))
+	var outer := memory_outer_radius(radius, width)
+	var inner := memory_inner_radius(radius, width)
+	# Fine notches at the outer edge suggest individual addresses without
+	# cutting coloured ownership runs into 512 noisy radial stripes.
+	var ticks := PackedVector2Array()
+	for cell in arena_size:
+		ticks.append(_at(center, outer - 3.0, cell))
+		ticks.append(_at(center, outer, cell))
+	draw_multiline(ticks, Color(0, 0, 0, 0.22), -1.0)
+	draw_arc(center, outer, 0.0, TAU, maxi(128, arena_size), Color("#646873"), 1.0, true)
+	draw_arc(center, inner, 0.0, TAU, maxi(128, arena_size), Color("#30333c"), 1.0, true)
+
+
+## Contrasting backing only in Filled Arcs; never move an existing lane.
+func _lane_backing(center: Vector2, lane: float, from_cell: float, to_cell: float, line_width: float) -> void:
+	if rendering_mode == "filled_arcs":
+		_span_arc(center, lane, from_cell, to_cell, Color(BACKGROUND, 0.9), line_width + 3.0)
+
+
+func _write_line(center: Vector2, inner: float, source: float, target: float, color: Color, line_width: float) -> void:
+	var start := _at(center, inner, source)
+	var end := _at(center, inner, target)
+	if rendering_mode == "filled_arcs":
+		draw_line(start, end, Color(BACKGROUND, 0.8), line_width + 2.0)
+	draw_line(start, end, color, line_width)
+
+
 func _angle(cell: float) -> float:
 	return -PI / 2.0 + TAU * cell / float(arena_size)
 
@@ -113,7 +226,7 @@ func _alpha(age: int) -> float:
 
 
 func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.07, 0.07, 0.09))
+	draw_rect(Rect2(Vector2.ZERO, size), BACKGROUND)
 	if state.is_empty():
 		return
 	var center := size / 2.0
@@ -127,10 +240,7 @@ func _draw() -> void:
 
 func _draw_broadcast(center: Vector2, radius: float, width: float) -> void:
 	var owners: PackedInt32Array = state["owners"]
-	for cell in arena_size:
-		var code := owners[cell]
-		var color := UNOWNED if code < 0 else ENTRANT_COLORS[code % ENTRANT_COLORS.size()].darkened(0.35)
-		_cell_arc(center, radius, cell, color, width)
+	_draw_memory(center, radius, width)
 	var alive: Array = state["alive"]
 	for i in entrants.size():
 		var color := ENTRANT_COLORS[i % ENTRANT_COLORS.size()]
@@ -139,6 +249,8 @@ func _draw_broadcast(center: Vector2, radius: float, width: float) -> void:
 		for cell in entrants[i]["core"]:
 			var held: bool = owners[int(cell)] == i
 			_cell_arc(center, radius + width * 0.95, int(cell), color if held else color.darkened(0.6), width * 0.45)
+			if rendering_mode == "filled_arcs":
+				_cell_arc(center, memory_inner_radius(radius, width) + 2.5, int(cell), color if held else color.darkened(0.6), 3.0)
 	if not effects.is_empty():
 		_draw_senses(center, radius, width)
 		_draw_actions(center, radius, width)
@@ -178,6 +290,7 @@ func _draw_senses(center: Vector2, radius: float, width: float) -> void:
 		var h := float(sense["half_width"]) if int(sense["half_width"]) >= 0 else 0.5
 		var delivered: bool = sense["state"] == "delivered"
 		var alpha := _alpha(int(sense["age"]))
+		_lane_backing(center, lane, c - h, c + h + 1.0, width * 0.4)
 		if delivered:
 			_span_arc(center, lane, c - h, c + h + 1.0, Color(color, 0.55 * alpha), width * 0.4)
 		else:
@@ -215,7 +328,7 @@ func _draw_actions(center: Vector2, radius: float, width: float) -> void:
 			var target := float(action["address"]) + 0.5
 			if int(action["age"]) == 0:
 				var inner := radius - width * 0.55
-				draw_line(_at(center, inner, float(action["source"]) + 0.5), _at(center, inner, target), Color(color, 0.9 if current else 0.22), 2.0 if current else 1.0)
+				_write_line(center, inner, float(action["source"]) + 0.5, target, Color(color, 0.9 if current else 0.22), 2.0 if current else 1.0)
 			var at := _at(center, radius, target)
 			if action["outcome"] == "took":
 				draw_circle(at, width * 0.24, Color(color.lightened(0.35), alpha))
@@ -324,8 +437,7 @@ func _entrant_index(entrant_id: String) -> int:
 
 
 func _draw_agent(center: Vector2, radius: float, width: float) -> void:
-	for cell in arena_size:
-		_cell_arc(center, radius, cell, UNKNOWN, width)
+	_draw_memory(center, radius, width)
 	# Own core as an outline: its location is known, its ownership is not
 	# delivered, so it must not look like the broadcast's solid "held" band.
 	var core_base := int(state["core_base"])
@@ -339,11 +451,13 @@ func _draw_agent(center: Vector2, radius: float, width: float) -> void:
 		var color: Color = SAMPLE_COLORS.get(String(sample["status"]), Color.WHITE)
 		var c := float(sample["center"])
 		var h := float(sample["half_width"])
+		_lane_backing(center, radius - width * 1.1, c - h, c + h + 1.0, width * 0.5)
 		_span_arc(center, radius - width * 1.1, c - h, c + h + 1.0, Color(color, 0.55), width * 0.5)
 	var own: Dictionary = state["own_actions"]
 	for pending in own["pending_senses"]:
 		var c := float(pending[1])
 		var h := float(sense_half_width) if sense_half_width >= 0 else 0.5
+		_lane_backing(center, radius - width * 1.1, c - h, c + h + 1.0, width * 0.4)
 		_dashed_arc(center, radius - width * 1.1, c - h, c + h + 1.0, Color(agent_color, 0.9), width * 0.4)
 	for process in state["processes"]:
 		var anchor := float(process[1])
@@ -358,7 +472,7 @@ func _draw_agent(center: Vector2, radius: float, width: float) -> void:
 			continue
 		if age == 0:
 			var inner := radius - width * 0.55
-			draw_line(_at(center, inner, float(write[1]) + 0.5), _at(center, inner, target), Color(agent_color, 0.22), 1.0)
+			_write_line(center, inner, float(write[1]) + 0.5, target, Color(agent_color, 0.22), 1.0)
 		# Outline only: whether the write changed ownership is not delivered.
 		draw_arc(_at(center, radius, target), width * 0.24, 0.0, TAU, 12, Color(agent_color.lightened(0.35), _alpha(age)), 1.5)
 	for move in own["moves"]:

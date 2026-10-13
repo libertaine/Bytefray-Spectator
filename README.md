@@ -17,6 +17,7 @@ controls). Local repository only.
 ```powershell
 ./launch_showcase.ps1                                   # Broadcast, tick 0, paused, 5 ticks/s
 ./launch_showcase.ps1 -Perspective agent_a -Tick 440 -Speed 20 -Play
+./launch_showcase.ps1 -Rendering classic -Tick 461
 ```
 
 The viewer opens the verified showcase fixture (Harrier vs Bastion, seed 427)
@@ -39,6 +40,8 @@ and refuses it if any file differs from its manifest. Set `GODOT` or pass
 | `project.godot`, `scenes/`, `scripts/` | Godot viewer (`broadcast_effects.gd`: broadcast-only effects, core status and tick summaries derived from recorded frames; `legend_view.gd`: the legend) |
 | `scripts/sound_synth.gd`, `sound_cues.gd`, `sound_effects.gd` | Procedural sound effects: PCM synthesis, cues derived from recorded frames, and the reusable player (see [Sound effects](#sound-effects)) |
 | `tests/smoke_test.gd` | Headless playback smoke test |
+| `tests/memory_ring_check.gd` | Headless address geometry, recorded ownership, seeking, perspective and playback/audio equivalence checks |
+| `tests/memory_ring_pixels.gd` | Native GPU check of every filled cell, band depth, ownership colour and wrap continuity (needs a real renderer) |
 | `tests/sound_check.gd` | Headless sound and announcer check: clips, cues against references from the raw files, playback, seeking, muting, throttling, the opening sequence and the victory call |
 | `scripts/announcer.gd` | The match announcer: opening sequence and victory call (see [Match announcer](#match-announcer)) |
 | `audio/announcer/` | The announcer's verified word clips, their raw speech and `voice.json` (made by `exporter/make_announcer_voice.py`) |
@@ -187,6 +190,40 @@ In Agent A, End, the tick box and the slider all clamp to the last tick of
 Agent A's own record, and playback stops there. Navigating to or past the end
 therefore shows where Agent A's record ends. Nothing reveals it passively. See
 `docs/P1_READABLE_BROADCAST_REVIEW_01.md` §5.
+
+## Memory rendering
+
+The header menu selects **Classic** (the original thin arcs) or **Filled Arcs**
+(the default). Launch with `--rendering=classic|filled_arcs`, or use
+`-Rendering classic|filled_arcs` in `launch_showcase.ps1`.
+
+Filled Arcs draws one filled annular wedge per memory address, spanning the
+whole address interval with shared edges. The outer edge is identical to
+Classic; the band extends 40 pixels inward. Short, faint notches at the outer
+edge mark cells while ownership runs remain continuous. Unowned cells are
+very dark gray; owned cells retain the competitor palette. A recorded WRITE
+that takes ownership briefly brightens that cell's current recorded colour,
+then fades over the same three tick ages as existing effects. There is no
+interpolated ownership and no wall-clock animation state to survive a seek.
+
+The existing core band and status cards remain, with an additional narrow
+inner core border in Broadcast. Process, sensing, movement and WRITE
+coordinates are unchanged; contrast backing keeps sensing and WRITE lines
+visible over the thicker memory band. Agent A's cells remain unknown, with
+no ownership flashes or broadcast core integrity: all its indicators still
+come exclusively from its own export. Rendering mode changes do not affect
+playback or sound, and the choice lasts for the application session.
+
+Comparable captures (both perspectives) can be made with:
+
+```powershell
+& $godot --path . --script res://tests/capture_frames.gd -- --rendering=classic --out=<classic-dir> --ticks=12,320,461,476,477
+& $godot --path . --script res://tests/capture_frames.gd -- --rendering=filled_arcs --out=<filled-dir> --ticks=12,320,461,476,477
+& $godot --headless --path . --script res://tests/memory_ring_check.gd
+& $godot --path . --script res://tests/memory_ring_pixels.gd
+```
+
+See [the validation record and screenshot comparisons](docs/FILLED_ARCS_MEMORY_VISUALIZATION_01.md).
 
 ## Sound effects
 

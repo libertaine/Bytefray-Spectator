@@ -205,11 +205,11 @@ func _check_launch_options(main: Node) -> void:
 	var options: Dictionary = main.launch_options(PackedStringArray([
 		"--fixture=dev", "--perspective=agent_a", "--tick=50", "--speed=20", "--play",
 	]))
-	check(options == {"fixture": FIXTURE, "perspective": "agent_a", "tick": 50, "speed": 4, "play": true}, "launch options parse: %s" % [options])
+	check(options == {"fixture": FIXTURE, "perspective": "agent_a", "tick": 50, "speed": 4, "play": true, "rendering": "filled_arcs"}, "launch options parse: %s" % [options])
 	check(main.SPEEDS == [1.0, 2.0, 5.0, 10.0, 20.0, 60.0, 200.0] and main.ticks_per_second == 5.0, "speed choices 1-200 ticks/s, default 5")
 	check(main.launch_options(PackedStringArray(["--speed=2"]))["speed"] == 1 and main.launch_options(PackedStringArray(["--speed=10"]))["speed"] == 3, "the new 2 and 10 ticks/s speeds are accepted")
 	var defaults: Dictionary = main.launch_options(PackedStringArray(["--perspective=omniscient", "--speed=7", "--tick=-3"]))
-	check(defaults == {"fixture": main.DEFAULT_FIXTURE, "perspective": "broadcast", "tick": -1, "speed": -1, "play": false}, "invalid launch options are ignored")
+	check(defaults == {"fixture": main.DEFAULT_FIXTURE, "perspective": "broadcast", "tick": -1, "speed": -1, "play": false, "rendering": "filled_arcs"}, "invalid launch options are ignored")
 	main.apply_launch_options(main.launch_options(PackedStringArray(["--perspective=agent_a", "--tick=100", "--speed=60"])))
 	check(main.perspective == "agent_a" and main.current_tick() == 100 and main.ticks_per_second == 60.0 and not main.playing, "launch options apply")
 	main.apply_launch_options(main.launch_options(PackedStringArray([])))

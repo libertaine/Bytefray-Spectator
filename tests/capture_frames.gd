@@ -57,6 +57,10 @@ func _process(_delta: float) -> bool:
 		_main.seek_tick(job[1])
 	else:
 		var path: String = _out.path_join("%s-tick-%04d.png" % [job[0], job[1]])
-		_viewport.get_texture().get_image().save_png(path)
+		var error := _viewport.get_texture().get_image().save_png(path)
+		if error != OK:
+			printerr("capture failed: ", path, " error ", error)
+			quit(1)
+			return true
 		print("saved ", path)
 	return false

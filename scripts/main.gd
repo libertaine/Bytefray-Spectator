@@ -15,7 +15,7 @@ extends Control
 ##
 ## Launch options (after `--`): --fixture=showcase|dev|<dir> (default
 ## showcase), --perspective=broadcast|agent_a, --tick=<n>, --speed=<ticks/s>
-## (one of SPEEDS) and --play.
+## (one of SPEEDS), --rendering=classic|filled_arcs and --play.
 ##
 ## Sound effects play only while playing, for the recorded frames playback has
 ## just passed, from the current perspective's own model (Agent A's from
@@ -109,6 +109,7 @@ var _footer: Label
 var _help: PanelContainer
 var _play_button: Button
 var _perspective_button: OptionButton
+var _rendering_button: OptionButton
 var _speed_button: OptionButton
 var _timeline: HSlider
 var _jump: LineEdit
@@ -126,7 +127,7 @@ func _ready() -> void:
 
 ## Parses launch options; an unrecognised value is reported and ignored.
 static func launch_options(args: PackedStringArray) -> Dictionary:
-	var options := {"fixture": DEFAULT_FIXTURE, "perspective": "broadcast", "tick": -1, "speed": -1, "play": false}
+	var options := {"fixture": DEFAULT_FIXTURE, "perspective": "broadcast", "tick": -1, "speed": -1, "play": false, "rendering": "filled_arcs"}
 	for arg in args:
 		var value := arg.get_slice("=", 1)
 		if arg.begins_with("--fixture="):
@@ -137,6 +138,8 @@ static func launch_options(args: PackedStringArray) -> Dictionary:
 			options["tick"] = int(value)
 		elif arg.begins_with("--speed=") and value.is_valid_float() and SPEEDS.has(float(value)):
 			options["speed"] = SPEEDS.find(float(value))
+		elif arg.begins_with("--rendering=") and RingView.RENDER_MODES.has(value):
+			options["rendering"] = value
 		elif arg == "--play":
 			options["play"] = true
 		elif not TEST_OPTIONS.any(func(prefix: String) -> bool: return arg.begins_with(prefix)):
@@ -145,12 +148,20 @@ static func launch_options(args: PackedStringArray) -> Dictionary:
 
 
 func apply_launch_options(options: Dictionary) -> void:
+	set_rendering_mode(options.get("rendering", "filled_arcs"))
 	set_perspective(options["perspective"])
 	if int(options["tick"]) >= 0:
 		seek_tick(int(options["tick"]))
 	if int(options["speed"]) >= 0:
 		set_speed_index(int(options["speed"]))
 	set_playing(options["play"])
+
+
+## A presentation setting only: changing it never jumps, pauses or cuts sound.
+func set_rendering_mode(value: String) -> void:
+	if RingView.RENDER_MODES.has(value):
+		_ring.set_rendering_mode(value)
+		_rendering_button.select(RingView.RENDER_MODES.find(value))
 
 
 func set_speed_index(i: int) -> void:
@@ -657,6 +668,13 @@ func _build_ui() -> void:
 	_perspective_button.add_item("Agent A")
 	_perspective_button.item_selected.connect(func(i: int) -> void: set_perspective(PERSPECTIVES[i]))
 	header.add_child(_perspective_button)
+	_rendering_button = OptionButton.new()
+	_rendering_button.add_item("Classic")
+	_rendering_button.add_item("Filled Arcs")
+	_rendering_button.select(1)
+	_rendering_button.tooltip_text = "Memory rendering (same arena coordinates)"
+	_rendering_button.item_selected.connect(func(i: int) -> void: set_rendering_mode(RingView.RENDER_MODES[i]))
+	header.add_child(_rendering_button)
 
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL

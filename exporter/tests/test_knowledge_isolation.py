@@ -161,15 +161,20 @@ def _godot(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-@pytest.fixture(scope="module")
-def traces(exports: dict[str, Path], tmp_path_factory: pytest.TempPathFactory) -> dict[str, list[str]]:
+@pytest.fixture(scope="module", params=("classic", "filled_arcs"))
+def traces(
+    exports: dict[str, Path], tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
+) -> dict[str, list[str]]:
     if not (ROOT / ".godot").is_dir():
         _godot("--import")
     out_dir = tmp_path_factory.mktemp("traces")
     traces: dict[str, list[str]] = {}
     for name in (*UNOBSERVED, "relocating", "raid"):
         out = out_dir / f"{name}.txt"
-        completed = _godot("--script", "res://tests/agent_view_trace.gd", "--", f"--fixture={exports[name]}", f"--out={out}")
+        completed = _godot(
+            "--script", "res://tests/agent_view_trace.gd", "--",
+            f"--fixture={exports[name]}", f"--out={out}", f"--rendering={request.param}",
+        )
         assert completed.returncode == 0, completed.stdout + completed.stderr
         traces[name] = out.read_text(encoding="utf-8").splitlines()
     return traces
