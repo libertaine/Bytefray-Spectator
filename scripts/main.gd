@@ -57,7 +57,7 @@ const HELP := """Keyboard
   H or F1                Show or hide this help
 
 Playback gives every recorded action of a tick an equal, in-order share
-of its time: at 1-2 ticks/s each one appears in turn. Effects fade over
+of its time: at 1 tick/s each one appears in turn. Effects fade over
 3 ticks; any seek redraws them from the record."""
 
 var manifest: Dictionary = {}

@@ -617,6 +617,15 @@ func _check_switch_while_playing(main: Node) -> void:
 			var boundary: int = main.index
 			main._process(0.0001)
 			ok = holds(ok, main.index == boundary, first, "%s index %d -> %s: resumed at %d, not the boundary %d" % [source, a, target, main.index, boundary])
+		# At tick 0 the progress can be carried without moving the index, so check it directly.
+		main.set_playing(false)
+		main.set_perspective(source)
+		main.restart()
+		main.set_playing(true)
+		main._process(0.02)
+		main.set_perspective(target)
+		main._process(0.0001)
+		ok = holds(ok, main.index == 0 and absf(main._play_progress - 0.0001) < 1e-9, first, "%s tick 0 -> %s: progress %f carried over" % [source, target, main._play_progress])
 		main.set_playing(false)
 		check(ok, "switching %s -> %s during playback resumes at the boundary: %s" % [source, target, first])
 

@@ -136,7 +136,7 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 The timeline slider seeks by tick. A key hint line is always shown.
 
 Playback gives every recorded frame of a tick an equal, in-order share of that
-tick's time. At 1–2 ticks/s each action of a tick appears in turn; at faster
+tick's time. At 1 tick/s each action of a tick appears in turn; at faster
 speeds a display frame can span several recorded frames, and the 3-tick
 effects carry the actions.
 While playing, the broadcast caption holds the summary of the last completed
