@@ -1,0 +1,15 @@
+{
+  "name": "spectator_harrier",
+  "display": "Harrier (Spectator showcase)",
+  "description": "Hunter-raider: sweeps SENSE windows, remembers contacts, confirms a core by its beacon and overwrites it; a keeper process rewrites its own core.",
+  "kind": "python",
+  "api_version": 2,
+  "entrypoint": "agent.py:create_agent",
+  "version": "1.0.0",
+  "capabilities": {
+    "version": 1,
+    "required": [
+      "sense"
+    ]
+  }
+}

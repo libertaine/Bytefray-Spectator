@@ -1,0 +1,15 @@
+{
+  "name": "spectator_bastion",
+  "display": "Bastion (Spectator showcase)",
+  "description": "Warden and raider: guards and repairs its core, disrupts sensed intruders, claims territory and raids the opponent's core once its beacon is confirmed.",
+  "kind": "python",
+  "api_version": 2,
+  "entrypoint": "agent.py:create_agent",
+  "version": "1.0.0",
+  "capabilities": {
+    "version": 1,
+    "required": [
+      "sense"
+    ]
+  }
+}
