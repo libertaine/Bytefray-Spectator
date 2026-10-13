@@ -1,0 +1,60 @@
+{
+  "first_events": {
+    "Agent A: first remembered contact": 1,
+    "first MOVE by A/keeper": 1,
+    "first MOVE by B/warden": 1,
+    "first A write on B's core": 4,
+    "first disruption of B/raider": 6,
+    "first disruption of B/warden": 6,
+    "Agent A: first stale contact": 9,
+    "first B write on A's core": 11,
+    "first disruption of A/hunter": 12,
+    "first disruption of A/keeper": 19,
+    "first MOVE by A/hunter": 461
+  },
+  "lowest_core_before_the_end": {
+    "A": {
+      "tick": 376,
+      "cells_held": 2
+    },
+    "B": {
+      "tick": 320,
+      "cells_held": 1
+    }
+  },
+  "core_cells_held_at": {
+    "1": {
+      "A": 8,
+      "B": 8
+    },
+    "9": {
+      "A": 8,
+      "B": 4
+    },
+    "12": {
+      "A": 6,
+      "B": 4
+    },
+    "320": {
+      "A": 4,
+      "B": 1
+    },
+    "461": {
+      "A": 5,
+      "B": 8
+    },
+    "476": {
+      "A": 2,
+      "B": 2
+    },
+    "477": {
+      "A": 0,
+      "B": 2
+    }
+  },
+  "owned_cells_min_max": [
+    16,
+    24
+  ],
+  "arena_size": 512
+}

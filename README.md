@@ -9,8 +9,19 @@ code, pinned to one Bytefray commit, to turn a recorded match into
 presentation files. The Godot viewer refuses any file whose SHA-256 does not
 match the manifest.
 
-Status: **P0-C** (showcase agents and a selected showcase fixture). Local
-repository only.
+Status: **P0-D** (human presentation evaluation of the showcase fixture).
+Local repository only.
+
+## Watch the showcase
+
+```powershell
+./launch_showcase.ps1                                   # Broadcast, tick 0, paused, 5 ticks/s
+./launch_showcase.ps1 -Perspective agent_a -Tick 440 -Speed 20 -Play
+```
+
+The viewer opens the verified showcase fixture (Harrier vs Bastion, seed 427)
+and refuses it if any file differs from its manifest. Set `GODOT` or pass
+`-Godot <path>` if Godot 4.7.2 is not at the default location.
 
 ## Layout
 
@@ -30,6 +41,8 @@ repository only.
 | `tests/agent_view_trace.gd` | Records everything the Agent A perspective shows (used by the differential tests) |
 | `tests/fixture_check.gd` | Generic headless playback check for any fixture (`-- --fixture=<dir>`) |
 | `tests/capture_frames.gd` | Renders screenshots of a fixture (needs a real renderer, not `--headless`) |
+| `launch_showcase.ps1` | Opens the viewer on the showcase fixture with a chosen perspective, tick, speed and play state |
+| `exporter/capture_v6_viewer.py` | Renders Bytefray's own V6 sensing viewer at chosen ticks, or records it, for comparison (P0-D) |
 | `docs/` | Phase records |
 
 ## Perspectives and information boundaries
@@ -85,7 +98,7 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 # Run a match between two agent directories (output outside the Bytefray checkout)
 & $py exporter/run_match.py --bytefray-root D:\Projects\BATTLE2 --agent-a <dir> --agent-b <dir> --seed <n> --out <new dir>
 
-# Exporter and isolation tests (about 3.5 minutes; includes a full re-export and the
+# Exporter and isolation tests (about 4 minutes; includes a full re-export and the
 # Godot differential traces). The OS-default pytest temp root is unreadable on the
 # dev machine, so pass a disposable basetemp.
 & $py -m pytest --basetemp=D:\Projects\Bytefray-Spectator-work\pytest
@@ -94,7 +107,15 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 & $godot --headless --path . --import
 & $godot --headless --path . --script res://tests/smoke_test.gd
 & $godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=res://fixtures/showcase/presentation
-& $godot --path .                       # optional: -- --fixture=res://fixtures/showcase/presentation
+& $godot --path .                       # opens the showcase; options below
+
+# Launch options (after --): --fixture=showcase|dev|<dir>, --perspective=broadcast|agent_a,
+# --tick=<n>, --speed=1|5|20|60|200 (ticks per second), --play
+& $godot --path . -- --fixture=dev --perspective=agent_a --tick=100
+
+# Same-match baseline: Bytefray's V6 sensing viewer, offscreen (screenshots or an H.264 recording)
+& $py exporter/capture_v6_viewer.py --bytefray-root D:\Projects\BATTLE2 --source fixtures/showcase/source --out <dir> --ticks 1,320,477
+& $py exporter/capture_v6_viewer.py --bytefray-root D:\Projects\BATTLE2 --source fixtures/showcase/source --out <file.mp4> --record omniscient --start 440 --speed 8
 ```
 
 ## Viewer controls
@@ -108,6 +129,12 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 | Tab | Switch Broadcast ↔ Agent A |
 
 The timeline slider seeks by tick.
+
+In Broadcast, an eliminated entrant's process markers are dimmed and crossed
+out, the tick-end caption names the entrant eliminated in that tick, and the
+verified result appears as a banner only at the recorded end. The Agent A
+perspective shows none of this, because Agent A is never delivered its
+elimination or the result.
 
 ## Showcase fixture
 

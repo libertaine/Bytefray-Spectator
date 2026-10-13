@@ -1,0 +1,63 @@
+{
+  "recordings": [
+    {
+      "command": "godot --path . --write-movie <avi> --fixed-fps 30 --quit-after 256 -- --fixture=showcase --perspective=broadcast --tick=440 --speed=5 --play; ffmpeg -i <avi> -c:v libx264 -preset slow -crf 28 -pix_fmt yuv420p <mp4>",
+      "file": "godot-broadcast-440-477-5tps.mp4",
+      "fps": 30,
+      "frames": 256,
+      "note": "two independent recordings produced byte-identical MP4s",
+      "perspective": "broadcast",
+      "seconds": 8.53,
+      "sha256": "6df8b32a9076f656d80919d119b67f7dc7ad451aa0609d6d36200c03ea4e94b1",
+      "speed": "5 ticks/s (viewer default)",
+      "viewer": "Godot Spectator (commit f95f9ae)"
+    },
+    {
+      "command": "same as above with --perspective=agent_a",
+      "file": "godot-agent_a-440-477-5tps.mp4",
+      "fps": 30,
+      "frames": 256,
+      "perspective": "agent_a",
+      "seconds": 8.53,
+      "sha256": "2d59454b0bc9964fc611b1b24e670a370e853881c970e5f6e4094bf00d9e6bbc",
+      "speed": "5 ticks/s (viewer default)",
+      "viewer": "Godot Spectator (commit f95f9ae)"
+    },
+    {
+      "command": "python exporter/capture_v6_viewer.py --bytefray-root D:/Projects/BATTLE2 --source fixtures/showcase/source --out <mp4> --record omniscient --start 440 --speed 1",
+      "file": "v6-omniscient-440-477-x1.mp4",
+      "fps": 30,
+      "frames": 1754,
+      "perspective": "omniscient",
+      "seconds": 58.47,
+      "sha256": "22e48b1f0b41953e6939a58b21f4f5ce315e99e351f1066d7b5793c9a32660c2",
+      "speed": "1x (viewer default; 0.05 s per phase position)",
+      "viewer": "Bytefray V6 sensing viewer (pin 9c81718)"
+    },
+    {
+      "command": "same with --speed 8",
+      "file": "v6-omniscient-440-477-x8.mp4",
+      "fps": 30,
+      "frames": 246,
+      "perspective": "omniscient",
+      "seconds": 8.2,
+      "sha256": "91eb6bd37403ee0ba86bee85ccec63837df1d3a853bae13bf9125c2967811213",
+      "speed": "8x (viewer maximum)",
+      "viewer": "Bytefray V6 sensing viewer (pin 9c81718)"
+    },
+    {
+      "command": "same with --record agent_a --speed 8",
+      "file": "v6-agent_a-440-477-x8.mp4",
+      "fps": 30,
+      "frames": 135,
+      "perspective": "agent_a",
+      "seconds": 4.5,
+      "sha256": "94bb97511f464d82dd18599768127e5369bdff155edb575f54b1336ea91caa5e",
+      "speed": "8x (viewer maximum)",
+      "viewer": "Bytefray V6 sensing viewer (pin 9c81718)"
+    }
+  ],
+  "schema": "bytefray.spectator.p0d_recordings",
+  "schema_version": 1,
+  "segment": "showcase fixture, tick 440 to the recorded end (477), then about 1 s held"
+}
