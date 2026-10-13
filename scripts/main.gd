@@ -7,21 +7,28 @@ extends Control
 ## agent perspective cannot be positioned by hidden opponent activity. The agent
 ## perspective shows only the public tick limit, never when the match ends.
 ##
+## Playback passes through every recorded frame of a tick, spread evenly over
+## that tick's share of time, so the order of actions within a tick is visible.
+## Each perspective is paced by its own frames only.
+##
 ## Launch options (after `--`): --fixture=showcase|dev|<dir> (default
 ## showcase), --perspective=broadcast|agent_a, --tick=<n>, --speed=<ticks/s>
 ## (one of SPEEDS) and --play.
 
 const FixtureLoader := preload("res://scripts/fixture_loader.gd")
 const BroadcastModel := preload("res://scripts/broadcast_model.gd")
+const BroadcastEffects := preload("res://scripts/broadcast_effects.gd")
 const AgentModel := preload("res://scripts/agent_model.gd")
 const RingView := preload("res://scripts/ring_view.gd")
+const LegendView := preload("res://scripts/legend_view.gd")
 
 const FIXTURES := {
 	"showcase": "res://fixtures/showcase/presentation",
 	"dev": "res://fixtures/dev/presentation",
 }
 const DEFAULT_FIXTURE := "res://fixtures/showcase/presentation"
-const SPEEDS := [1.0, 5.0, 20.0, 60.0, 200.0]  # ticks per second
+const SPEEDS := [1.0, 2.0, 5.0, 10.0, 20.0, 60.0, 200.0]  # ticks per second
+const DEFAULT_SPEED := 2  # index of 5 ticks/s
 const PHASE_NAMES := ["OBSERVATION", "ACTION", "TICK_END"]
 const PERSPECTIVES := ["broadcast", "agent_a"]
 const REASONS := {
@@ -29,32 +36,58 @@ const REASONS := {
 	"all_agents_dead": "all agents eliminated",
 	"tick_limit": "tick limit reached",
 }
+const RECENT_ACTIONS := 6
+# Options read by the test and capture scripts, not by the viewer.
+const TEST_OPTIONS := ["--out=", "--ticks=", "--core-log=", "--fps=", "--frames="]
+const NO_COUNTS := {"writes": 0, "took": 0, "core_hits": 0, "recovered": 0, "hits": 0, "moves": 0, "senses": 0, "reads": 0, "refused": 0}
 # Static text: the same at every position, so it reveals nothing about the match.
 const AGENT_NOTE := "Agent A is never told the outcome. Switch to Broadcast (Tab) to see it."
+const KEY_HINT := "Space play  |  Left/Right step  |  Shift+Left/Right tick  |  Home/End  |  G jump to tick  |  Tab perspective  |  -/+ speed  |  L legend  |  H help"
+const HELP := """Keyboard
+  Space                  Play / pause
+  Right / Left           Step one recorded frame
+  Shift+Right / Left     Step one tick
+  Home / End             Restart / jump to the last tick
+  G                      Jump to a tick (type it, then Enter)
+  Tab                    Switch Broadcast / Agent A
+  - / +                  Slower / faster playback
+  L                      Show or hide the legend
+  H or F1                Show or hide this help
+
+Playback passes through every recorded action of each tick, in order.
+Effects fade over 3 ticks; any seek redraws them from the record."""
 
 var manifest: Dictionary = {}
 var tick_limit := 0
+var sense_half_width := -1  # public ruleset constant (manifest ruleset)
 var broadcast: BroadcastModel
+var effects: BroadcastEffects
 var agent: AgentModel
 var perspective := "broadcast"
 var index := 0
 var playing := false
-var ticks_per_second: float = SPEEDS[1]
+var ticks_per_second: float = SPEEDS[DEFAULT_SPEED]
 var load_error := ""
 
-var _accumulator := 0.0
+var _play_base := 0  # last completed tick boundary of the playback interval
+var _play_progress := 0.0  # ticks elapsed since that boundary, in [0, 1)
+var _play_index := -1  # index playback last set (anything else means a seek)
 var _syncing_slider := false
 
 var _ring: RingView
+var _legend: LegendView
 var _title: Label
 var _position_label: Label
 var _caption: Label
 var _side: RichTextLabel
+var _hint: Label
 var _footer: Label
+var _help: PanelContainer
 var _play_button: Button
 var _perspective_button: OptionButton
 var _speed_button: OptionButton
 var _timeline: HSlider
+var _jump: LineEdit
 var _controls: Array[Control] = []
 
 
@@ -80,7 +113,7 @@ static func launch_options(args: PackedStringArray) -> Dictionary:
 			options["speed"] = SPEEDS.find(float(value))
 		elif arg == "--play":
 			options["play"] = true
-		elif not (arg.begins_with("--out=") or arg.begins_with("--ticks=")):  # test-script options
+		elif not TEST_OPTIONS.any(func(prefix: String) -> bool: return arg.begins_with(prefix)):
 			printerr("Ignoring unrecognised launch option: ", arg)
 	return options
 
@@ -95,6 +128,7 @@ func apply_launch_options(options: Dictionary) -> void:
 
 
 func set_speed_index(i: int) -> void:
+	i = clampi(i, 0, SPEEDS.size() - 1)
 	ticks_per_second = SPEEDS[i]
 	_speed_button.select(i)
 
@@ -102,11 +136,13 @@ func set_speed_index(i: int) -> void:
 func load_fixture(dir: String) -> String:
 	playing = false
 	broadcast = null
+	effects = null
 	agent = null
 	manifest = {}
 	load_error = _load(dir)
 	for control in _controls:
 		control.set("disabled", not load_error.is_empty())
+	_jump.editable = load_error.is_empty()
 	if load_error.is_empty():
 		perspective = "broadcast"
 		_perspective_button.select(0)
@@ -135,7 +171,9 @@ func _load(dir: String) -> String:
 		return a["error"]
 	manifest = candidate
 	tick_limit = int(candidate["match"]["tick_limit"])
+	sense_half_width = int(BroadcastEffects.SENSE_HALF_WIDTH.get(String(candidate["match"]["ruleset_id"]), -1))
 	broadcast = BroadcastModel.new(b["document"])
+	effects = BroadcastEffects.new(broadcast)
 	agent = AgentModel.new(a["document"])
 	return ""
 
@@ -185,24 +223,68 @@ func seek_tick(tick: int) -> void:
 	_refresh()
 
 
+## The last tick of the timeline. In Agent A this is the public tick limit,
+## which the model clamps to the end of Agent A's own record, like any seek.
+func jump_to_end() -> void:
+	seek_tick(int(_timeline.max_value))
+
+
+## Seeks to a typed tick number; anything else is ignored.
+func jump_to_tick(text: String) -> bool:
+	var value := text.strip_edges()
+	if load_error.is_empty() and value.is_valid_int() and int(value) >= 0:
+		seek_tick(int(value))
+		return true
+	return false
+
+
 func set_playing(value: bool) -> void:
 	playing = value and load_error.is_empty()
-	_accumulator = 0.0
+	_play_index = -1
 	if _play_button:
 		_play_button.text = "Pause" if playing else "Play"
+	if not load_error.is_empty():
+		return
+	if playing:
+		_sync_play_position()
+	_refresh()  # the broadcast caption differs between playing and paused
+
+
+## Playback position from the current index: the last completed tick boundary
+## and how far through the next tick's frames the index is.
+func _sync_play_position() -> void:
+	var model = current_model()
+	if model.is_tick_end(index):
+		_play_base = model.tick_of(index)
+		_play_progress = 0.0
+	else:
+		_play_base = model.tick_of(index) - 1
+		var start: int = model.index_for_tick_end(_play_base)
+		var count: int = model.index_for_tick_end(_play_base + 1) - start
+		_play_progress = float(index - start) / float(count)
+	_play_index = index
 
 
 func _process(delta: float) -> void:
 	if not playing:
 		return
-	_accumulator += delta * ticks_per_second
-	while _accumulator >= 1.0:
-		_accumulator -= 1.0
-		var model = current_model()
-		if model.tick_of(index) >= model.max_tick and model.is_tick_end(index):
-			set_playing(false)
-			return
-		seek_tick(model.tick_of(index) + (1 if model.is_tick_end(index) else 0))
+	var model = current_model()
+	if index != _play_index:
+		_sync_play_position()
+	_play_progress += delta * ticks_per_second
+	var whole := int(floor(_play_progress))
+	_play_base += whole
+	_play_progress -= whole
+	if _play_base >= model.max_tick:
+		index = model.index_for_tick_end(model.max_tick)
+		set_playing(false)
+		return
+	# Each frame of the next tick, its TICK_END included, gets an equal share.
+	var start: int = model.index_for_tick_end(_play_base)
+	var count: int = model.index_for_tick_end(_play_base + 1) - start
+	index = start + int(floor(_play_progress * count))
+	_play_index = index
+	_refresh()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -219,8 +301,21 @@ func _unhandled_input(event: InputEvent) -> void:
 				step_frame(direction)
 		KEY_HOME:
 			restart()
+		KEY_END:
+			jump_to_end()
 		KEY_TAB:
 			set_perspective("agent_a" if perspective == "broadcast" else "broadcast")
+		KEY_G:
+			_jump.grab_focus()
+			_jump.select_all()
+		KEY_MINUS, KEY_KP_SUBTRACT:
+			set_speed_index(SPEEDS.find(ticks_per_second) - 1)
+		KEY_EQUAL, KEY_PLUS, KEY_KP_ADD:
+			set_speed_index(SPEEDS.find(ticks_per_second) + 1)
+		KEY_L:
+			_legend.visible = not _legend.visible
+		KEY_H, KEY_F1, KEY_SLASH:
+			_help.visible = not _help.visible
 		_:
 			return
 	get_viewport().set_input_as_handled()
@@ -233,13 +328,16 @@ func _refresh() -> void:
 	var state: Dictionary = model.state(index)
 	var tick := int(state["tick"])
 	var phase: String = PHASE_NAMES[int(state["phase"])]
+	_legend.set_perspective(perspective)
 	if perspective == "broadcast":
-		_ring.show_broadcast(state, broadcast.entrants, broadcast.arena_size, _result_banner(tick))
+		var shown := effects.at(index)
+		var cores := effects.cores(index)
+		_ring.show_broadcast(state, broadcast.entrants, broadcast.arena_size, _result_banner(tick), shown, cores)
 		_title.text = "Broadcast - full world state"
-		_caption.text = state["caption"]
-		_side.text = _broadcast_panel(tick)
+		_caption.text = _broadcast_caption()
+		_side.text = _broadcast_panel(state, shown, cores)
 	else:
-		_ring.show_agent(state, agent.arena_size)
+		_ring.show_agent(state, agent.arena_size, sense_half_width)
 		_title.text = "Agent %s (%s) - delivered information only" % [agent.entrant_id, agent.entrant_name]
 		_caption.text = "Receipt: %s   Opponent activity: %s" % [state["receipt"], agent.opponent_activity]
 		_side.text = _agent_panel(state)
@@ -259,22 +357,134 @@ func _refresh() -> void:
 	]
 
 
-func _broadcast_panel(tick: int) -> String:
+## While playing, mid-tick frames go by too fast to read, so the caption holds
+## the summary of the last completed tick. Paused, it describes this frame.
+func _broadcast_caption() -> String:
+	if playing and not broadcast.is_tick_end(index):
+		var last: int = broadcast.tick_of(index) - 1
+		return frame_caption(broadcast.index_for_tick_end(last)) if last >= 0 else ""
+	return frame_caption(index)
+
+
+## The broadcast caption of frame `at`: the recorded fact and its recorded
+## outcome; at a tick end, the summary of that tick.
+func frame_caption(at: int) -> String:
+	var text := broadcast.caption(at)
+	if broadcast.is_tick_end(at):
+		var summary := summary_text(effects.tick_summary(at))
+		return text + ("  -  " + summary if summary != "" else "")
+	var action := effects.action_at(at)
+	if not action.is_empty():
+		return text + _outcome_text(action)
+	var sense := effects.delivery_at(at)
+	if not sense.is_empty():
+		text += "  -  SENSE sample from tick %d delivered (%s)" % [int(sense["t"]), _anchors_text(sense["sensed"])]
+	return text
+
+
+func _outcome_text(action: Dictionary) -> String:
+	var parts: PackedStringArray = []
+	match String(action["kind"]):
+		"write":
+			if action["outcome"] == "took":
+				parts.append("took the cell")
+			elif action["outcome"] == "kept":
+				parts.append("owner unchanged")
+			var owner := int(action["core_owner"])
+			if action["core_change"] == "damage":
+				parts.append("%s core cell lost" % broadcast.entrants[owner]["id"])
+			elif action["core_change"] == "recovery":
+				parts.append("%s core cell regained" % broadcast.entrants[owner]["id"])
+			for hit in action["hits"]:
+				parts.append("hits %s/%s" % [hit[0], hit[1]])
+			if action["decisive"]:
+				parts.append("DECISIVE CAPTURE")
+		"move":
+			if action["outcome"] != "refused":
+				parts.append("%d -> %d" % [int(action["from"]), posmod(int(action["from"]) + int(action["delta"]), broadcast.arena_size)])
+		"sense":
+			if action["outcome"] != "refused":
+				parts.append("sampled %s" % _anchors_text(action["sensed"]))
+	return "" if parts.is_empty() else "  -  " + ", ".join(parts)
+
+
+static func _anchors_text(anchors: Array) -> String:
+	if anchors.is_empty():
+		return "nothing"
+	var cells: PackedStringArray = []
+	for anchor in anchors:
+		cells.append(str(int(anchor)))
+	return "%s at %s" % ["1 anchor" if anchors.size() == 1 else "%d anchors" % anchors.size(), ", ".join(cells)]
+
+
+## One line per entrant with actions: "A: 7 writes (took 3, 2 core), 1 sense".
+func summary_text(summary: Array) -> String:
+	var entrant_parts: PackedStringArray = []
+	for e in summary.size():
+		var counts: Dictionary = summary[e]
+		var parts: PackedStringArray = []
+		if counts["writes"] > 0:
+			var detail: PackedStringArray = []
+			if counts["took"] > 0:
+				detail.append("took %d" % counts["took"])
+			if counts["core_hits"] > 0:
+				detail.append("%d core" % counts["core_hits"])
+			if counts["recovered"] > 0:
+				detail.append("%d own core back" % counts["recovered"])
+			if counts["hits"] > 0:
+				detail.append("%d hit%s" % [counts["hits"], "" if counts["hits"] == 1 else "s"])
+			parts.append("%d write%s%s" % [counts["writes"], "" if counts["writes"] == 1 else "s", " (%s)" % ", ".join(detail) if not detail.is_empty() else ""])
+		for key in ["senses", "moves", "reads", "refused"]:
+			if counts[key] > 0:
+				parts.append("%d %s" % [counts[key], key.trim_suffix("s") if counts[key] == 1 else key])
+		if not parts.is_empty():
+			entrant_parts.append("%s: %s" % [broadcast.entrants[e]["id"], ", ".join(parts)])
+	return "   ".join(entrant_parts)
+
+
+func _broadcast_panel(state: Dictionary, shown: Dictionary, cores: Array) -> String:
 	var lines: PackedStringArray = []
-	var alive: Array = broadcast.state(index)["alive"]
+	var tick := int(state["tick"])
+	var alive: Array = state["alive"]
 	for i in broadcast.entrants.size():
 		var entrant: Dictionary = broadcast.entrants[i]
 		var color := RingView.ENTRANT_COLORS[i % RingView.ENTRANT_COLORS.size()].to_html(false)
-		lines.append("[color=#%s]%s[/color] %s  %s  core %d/8" % [
+		var note := RingView.core_note(cores[i])
+		lines.append("[color=#%s]%s[/color] %s  %s  core %d/%d%s" % [
 			color, entrant["id"], entrant["name"],
 			"alive" if alive.has(entrant["id"]) else "eliminated",
-			broadcast.core_cells_owned(index, i),
+			int(cores[i]["held"]), int(cores[i]["size"]),
+			"" if note == "" or note == "ELIMINATED" else "  (%s)" % note,
+		])
+	lines.append("")
+	lines.append("Tick %d so far:" % tick)
+	var summary: Array = effects.tick_summary(index)
+	for i in summary.size():
+		var only: Array = []
+		for e in summary.size():
+			only.append(summary[e] if e == i else NO_COUNTS)
+		var text := summary_text(only)
+		lines.append("  %s" % (text if text != "" else "%s: no actions" % broadcast.entrants[i]["id"]))
+	lines.append("")
+	lines.append("Recent actions:")
+	for action in _recent_actions(shown):
+		var color := RingView.ENTRANT_COLORS[int(action["entrant"]) % RingView.ENTRANT_COLORS.size()].to_html(false)
+		lines.append("  t%d [color=#%s]%s/%s[/color] %s%s%s" % [
+			int(action["t"]), color, action["actor"], action["process"], String(action["kind"]).to_upper(),
+			" %d" % int(action["address"]) if int(action["address"]) >= 0 else "", _outcome_text(action),
 		])
 	if _at_recorded_end(tick):
 		lines.append("")
 		var reason := String(broadcast.result["termination_reason"])
 		lines.append("Result: %s (%s, tick %d)" % [_winner_text(), REASONS.get(reason, reason), int(broadcast.result["ticks"])])
 	return "\n".join(lines)
+
+
+## The latest recorded actions at or before this frame, newest first.
+func _recent_actions(shown: Dictionary) -> Array:
+	var recent: Array = shown["actions"] + shown["senses"]
+	recent.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["i"]) > int(b["i"]))
+	return recent.slice(0, RECENT_ACTIONS)
 
 
 func _at_recorded_end(tick: int) -> bool:
@@ -310,12 +520,15 @@ func _agent_panel(state: Dictionary) -> String:
 	lines.append("")
 	lines.append("Recent own events:")
 	for event in state["recent_events"]:
-		var text := String(event["kind"])
+		var action: bool = event["status"] != null
+		var text := "t%d %s %s" % [int(event["t"]), event["process"], String(event["kind"]).to_upper() if action else String(event["kind"])]
 		if event["address"] != null:
 			text += " %d" % int(event["address"])
-		if event["status"] != null:
+		if action:
 			text += " -> %s" % event["status"]
-		lines.append("  %s  %s" % [text, event["message"]])
+		if event["detail"] != "":
+			text += (" (%s)" if action else ": %s") % event["detail"]
+		lines.append("  " + text)
 	return "\n".join(lines)
 
 
@@ -345,12 +558,21 @@ func _build_ui() -> void:
 	_ring.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ring.size_flags_stretch_ratio = 2.0
 	body.add_child(_ring)
+	var column := VBoxContainer.new()
+	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	body.add_child(column)
 	_side = RichTextLabel.new()
 	_side.bbcode_enabled = true
-	_side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_child(_side)
+	_side.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_side.add_theme_font_size_override("normal_font_size", 14)
+	column.add_child(_side)
+	_legend = LegendView.new()
+	_legend.set_perspective("broadcast")
+	column.add_child(_legend)
 
 	_caption = Label.new()
+	_caption.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_caption.clip_text = true
 	root.add_child(_caption)
 	_position_label = Label.new()
 	root.add_child(_position_label)
@@ -372,17 +594,46 @@ func _build_ui() -> void:
 	_play_button = _add_button(controls, "Play", func() -> void: set_playing(not playing))
 	_add_button(controls, "Step >", func() -> void: step_frame(1))
 	_add_button(controls, "Tick >>", func() -> void: step_tick(1))
+	_add_button(controls, "End", jump_to_end)
 	_speed_button = OptionButton.new()
 	for speed in SPEEDS:
 		_speed_button.add_item("%d ticks/s" % int(speed))
-	_speed_button.select(1)
+	_speed_button.select(DEFAULT_SPEED)
 	_speed_button.item_selected.connect(set_speed_index)
 	controls.add_child(_speed_button)
+	var jump_label := Label.new()
+	jump_label.text = "  Tick"
+	controls.add_child(jump_label)
+	_jump = LineEdit.new()
+	_jump.custom_minimum_size = Vector2(64, 0)
+	_jump.placeholder_text = "G"
+	_jump.text_submitted.connect(
+		func(text: String) -> void:
+			jump_to_tick(text)
+			_jump.release_focus()
+	)
+	controls.add_child(_jump)
+	_add_button(controls, "Go", func() -> void: jump_to_tick(_jump.text))
+	_add_button(controls, "Help", func() -> void: _help.visible = not _help.visible)
 	_controls.append_array([_perspective_button, _speed_button, _timeline])
 
+	_hint = Label.new()
+	_hint.text = KEY_HINT
+	_hint.add_theme_font_size_override("font_size", 12)
+	_hint.add_theme_color_override("font_color", Color(0.7, 0.7, 0.74))
+	root.add_child(_hint)
 	_footer = Label.new()
 	_footer.add_theme_font_size_override("font_size", 12)
 	root.add_child(_footer)
+
+	_help = PanelContainer.new()
+	_help.visible = false
+	var help_text := Label.new()
+	help_text.text = HELP
+	help_text.add_theme_font_size_override("font_size", 15)
+	_help.add_child(help_text)
+	add_child(_help)
+	_help.resized.connect(func() -> void: _help.position = ((size - _help.size) / 2.0).floor())
 
 
 func _add_button(parent: Control, text: String, callback: Callable) -> Button:

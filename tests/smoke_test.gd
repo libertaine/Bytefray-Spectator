@@ -10,7 +10,7 @@ const TAMPER_DIR := "user://smoke_tamper"
 # The only state keys the ring view may hold in the agent perspective.
 const AGENT_STATE_KEYS := [
 	"mode", "tick", "callback", "phase", "core_base", "core_size", "processes",
-	"contacts", "receipt", "latest_sample", "recent_events",
+	"contacts", "receipt", "latest_sample", "recent_events", "own_actions",
 ]
 
 var failures: PackedStringArray = []
@@ -130,15 +130,78 @@ func _run(main: Node) -> void:
 		main._process(0.1)
 	check(not main.playing and main.current_tick() == 1000, "play stops at the end")
 
+	_check_controls(main)
+
 	# Tampering: a one-byte change to a presentation file is rejected.
 	_check_tamper(main)
+
+
+func _key(main: Node, keycode: Key, shift: bool = false) -> void:
+	var event := InputEventKey.new()
+	event.keycode = keycode
+	event.pressed = true
+	event.shift_pressed = shift
+	main._unhandled_input(event)
+
+
+## P1-4 controls: End, jump to tick, speed keys, legend, help and the key hint.
+func _check_controls(main: Node) -> void:
+	main.set_playing(false)
+	main.set_perspective("broadcast")
+	main.restart()
+	_key(main, KEY_END)
+	check(main.current_tick() == main.broadcast.max_tick and main.current_model().is_tick_end(main.index), "End jumps to the last tick (broadcast)")
+	_key(main, KEY_HOME)
+	check(main.index == 0, "Home restarts")
+	check(main.jump_to_tick("250") and main.current_tick() == 250 and main.current_model().is_tick_end(main.index), "jump to tick 250")
+	check(not main.jump_to_tick("abc") and not main.jump_to_tick("-4") and main.current_tick() == 250, "invalid tick entries are ignored")
+	main._jump.text = "300"
+	main._jump.text_submitted.emit("300")
+	check(main.current_tick() == 300, "Enter in the tick box jumps")
+	main.set_speed_index(2)
+	_key(main, KEY_EQUAL)
+	check(main.ticks_per_second == 10.0, "+ raises the speed to 10 ticks/s")
+	_key(main, KEY_MINUS)
+	_key(main, KEY_MINUS)
+	check(main.ticks_per_second == 2.0, "- lowers the speed to 2 ticks/s")
+	for i in 10:
+		_key(main, KEY_MINUS)
+	check(main.ticks_per_second == 1.0, "the speed stops at 1 tick/s")
+	main.set_speed_index(2)
+	var legend_visible: bool = main._legend.visible
+	_key(main, KEY_L)
+	check(main._legend.visible != legend_visible, "L toggles the legend")
+	_key(main, KEY_L)
+	check(not main._help.visible, "help starts hidden")
+	_key(main, KEY_H)
+	check(main._help.visible and (main._help.get_child(0) as Label).text.contains("Jump to a tick"), "H shows the keyboard help")
+	_key(main, KEY_H)
+	check(not main._help.visible, "H hides the help again")
+	check(main._hint.text.contains("G jump to tick") and main._hint.text.contains("H help"), "the key hint line is shown")
+	check(main._legend.text().contains("SENSE sample taken, not yet delivered"), "broadcast legend")
+	# Paused: the caption describes the frame; playing mid-tick: the last tick's summary.
+	main.seek_tick(10)
+	main.step_frame(3)
+	var paused_caption: String = main._caption.text
+	main.set_playing(true)
+	check(main._caption.text.begins_with("Tick 10 ends") and paused_caption != main._caption.text, "while playing, the caption holds the last tick's summary")
+	main.set_playing(false)
+	check(main._caption.text == paused_caption, "paused, the caption describes the frame again")
+	# Agent A: End and the tick box land where any seek lands (the end of its own record).
+	main.set_perspective("agent_a")
+	check(main._legend.text().contains("Own WRITE target (outcome not delivered)"), "agent legend")
+	_key(main, KEY_END)
+	check(main.current_tick() == main.agent.max_tick, "End in Agent A lands on the last tick of its own record")
+	main.set_perspective("broadcast")
 
 
 func _check_launch_options(main: Node) -> void:
 	var options: Dictionary = main.launch_options(PackedStringArray([
 		"--fixture=dev", "--perspective=agent_a", "--tick=50", "--speed=20", "--play",
 	]))
-	check(options == {"fixture": FIXTURE, "perspective": "agent_a", "tick": 50, "speed": 2, "play": true}, "launch options parse: %s" % [options])
+	check(options == {"fixture": FIXTURE, "perspective": "agent_a", "tick": 50, "speed": 4, "play": true}, "launch options parse: %s" % [options])
+	check(main.SPEEDS == [1.0, 2.0, 5.0, 10.0, 20.0, 60.0, 200.0] and main.ticks_per_second == 5.0, "speed choices 1-200 ticks/s, default 5")
+	check(main.launch_options(PackedStringArray(["--speed=2"]))["speed"] == 1 and main.launch_options(PackedStringArray(["--speed=10"]))["speed"] == 3, "the new 2 and 10 ticks/s speeds are accepted")
 	var defaults: Dictionary = main.launch_options(PackedStringArray(["--perspective=omniscient", "--speed=7", "--tick=-3"]))
 	check(defaults == {"fixture": main.DEFAULT_FIXTURE, "perspective": "broadcast", "tick": -1, "speed": -1, "play": false}, "invalid launch options are ignored")
 	main.apply_launch_options(main.launch_options(PackedStringArray(["--perspective=agent_a", "--tick=100", "--speed=60"])))

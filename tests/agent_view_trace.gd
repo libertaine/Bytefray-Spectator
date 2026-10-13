@@ -4,12 +4,14 @@ extends SceneTree
 ## Run: godot --headless --path . --script res://tests/agent_view_trace.gd -- --fixture=<dir> --out=<file>
 ##
 ## Each line is one observation of the visible agent-perspective outputs (title,
-## caption, side panel, position label, timeline value and range, footer, and the
-## ring view's state and banner) after a viewer operation: stepping every frame,
-## stepping ticks backwards, seeking every tick, dragging the timeline, playing at
-## a fixed frame rate, and switching in from every broadcast frame. Switching lines are
-## run-length collapsed, because how many broadcast frames map to one agent
-## position is broadcast data, not agent data.
+## caption, side panel, position label, timeline value and range, footer, the
+## ring view's state and banner, and since P1 the legend, the key hint and any
+## broadcast effects or core gauges the ring holds) after a viewer operation:
+## stepping every frame, stepping ticks backwards, seeking every tick, dragging
+## the timeline, End, the jump-to-tick box, playing at a fixed frame rate (fast,
+## and slowly through every frame of a tick), and switching in from every
+## broadcast frame. Switching lines are run-length collapsed, because how many
+## broadcast frames map to one agent position is broadcast data, not agent data.
 
 var _main: Node
 var _frame := 0
@@ -47,6 +49,7 @@ func _observe(tag: String) -> String:
 		tag, m.perspective, m._title.text, m._caption.text, m._side.text.replace("\n", "\\n"),
 		m._position_label.text, "%d/%d" % [int(m._timeline.value), int(m._timeline.max_value)],
 		m._footer.text, JSON.stringify(m._ring.state), m._ring.banner,
+		m._legend.text().replace("\n", "\\n"), JSON.stringify([m._ring.effects, m._ring.cores]), m._hint.text,
 	])
 
 
@@ -67,6 +70,11 @@ func _record(lines: PackedStringArray) -> void:
 	for tick in range(0, m.tick_limit + 1):
 		m._timeline.value = tick
 		lines.append(_observe("slider"))
+	m.jump_to_end()
+	lines.append(_observe("end"))
+	for tick in range(0, m.tick_limit + 2, 7):
+		m.jump_to_tick(str(tick))
+		lines.append(_observe("jump"))
 	m.restart()
 	m.ticks_per_second = 20.0
 	m.set_playing(true)
@@ -75,6 +83,13 @@ func _record(lines: PackedStringArray) -> void:
 		m._process(0.037)
 		lines.append(_observe("play"))
 		guard += 1
+	m.set_playing(false)
+	m.seek_tick(3)
+	m.ticks_per_second = 1.0
+	m.set_playing(true)
+	for i in 3 * 240:
+		m._process(1.0 / 240.0)
+		lines.append(_observe("play-slow"))
 	m.set_playing(false)
 	var last := ""
 	m.set_perspective("broadcast")

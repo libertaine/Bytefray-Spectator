@@ -9,8 +9,8 @@ code, pinned to one Bytefray commit, to turn a recorded match into
 presentation files. The Godot viewer refuses any file whose SHA-256 does not
 match the manifest.
 
-Status: **P0-D** (human presentation evaluation of the showcase fixture).
-Local repository only.
+Status: **P1** (readable broadcast: sensing, actions, core status and
+controls). Local repository only.
 
 ## Watch the showcase
 
@@ -36,11 +36,12 @@ and refuses it if any file differs from its manifest. Set `GODOT` or pass
 | `fixtures/showcase/` | The P0-C showcase match (Harrier vs Bastion, seed 427), with `selection/` evidence (`ranking.json`, `validation.json`, `examination.json`) |
 | `agents/` | Two showcase agents, `spectator_harrier` and `spectator_bastion` (see `agents/README.md`) |
 | `exporter/showcase_search.py` | Runs, measures, ranks and validates showcase candidates under `docs/P0_SHOWCASE_SELECTION_PROTOCOL.md` |
-| `project.godot`, `scenes/`, `scripts/` | Godot viewer |
+| `project.godot`, `scenes/`, `scripts/` | Godot viewer (`broadcast_effects.gd`: broadcast-only effects, core status and tick summaries derived from recorded frames; `legend_view.gd`: the legend) |
 | `tests/smoke_test.gd` | Headless playback smoke test |
 | `tests/agent_view_trace.gd` | Records everything the Agent A perspective shows (used by the differential tests) |
 | `tests/fixture_check.gd` | Generic headless playback check for any fixture (`-- --fixture=<dir>`) |
-| `tests/capture_frames.gd` | Renders screenshots of a fixture (needs a real renderer, not `--headless`) |
+| `tests/capture_frames.gd` | Renders screenshots of a fixture into a fixed 1280x800 viewport (needs a real renderer, not `--headless`) |
+| `tests/record_frames.gd` | Records playback as PNG frames at a fixed frame rate into the same viewport, for encoding with ffmpeg |
 | `launch_showcase.ps1` | Opens the viewer on the showcase fixture with a chosen perspective, tick, speed and play state |
 | `exporter/capture_v6_viewer.py` | Renders Bytefray's own V6 sensing viewer at chosen ticks, or records it, for comparison (P0-D) |
 | `docs/` | Phase records |
@@ -110,7 +111,7 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 & $godot --path .                       # opens the showcase; options below
 
 # Launch options (after --): --fixture=showcase|dev|<dir>, --perspective=broadcast|agent_a,
-# --tick=<n>, --speed=1|5|20|60|200 (ticks per second), --play
+# --tick=<n>, --speed=1|2|5|10|20|60|200 (ticks per second), --play
 & $godot --path . -- --fixture=dev --perspective=agent_a --tick=100
 
 # Same-match baseline: Bytefray's V6 sensing viewer, offscreen (screenshots or an H.264 recording)
@@ -123,18 +124,52 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 | Key | Action |
 | --- | --- |
 | Space | Play/pause (ticks per second chosen in the speed menu) |
-| Right / Left | Step one phase frame |
+| Right / Left | Step one recorded frame |
 | Shift+Right / Shift+Left | Step one tick |
-| Home | Restart |
+| Home / End | Restart / jump to the last tick |
+| G | Jump to a tick (type it in the Tick box, then Enter) |
 | Tab | Switch Broadcast ↔ Agent A |
+| - / + | Slower / faster (1, 2, 5, 10, 20, 60 or 200 ticks/s) |
+| L | Show or hide the legend |
+| H, F1 or ? | Show or hide the keyboard help |
 
-The timeline slider seeks by tick.
+The timeline slider seeks by tick. A key hint line is always shown.
+
+Playback passes through every recorded frame of each tick, spread evenly over
+that tick's share of time, so the order of actions within a tick is visible.
+While playing, the broadcast caption holds the summary of the last completed
+tick; paused or stepping, it describes the current recorded fact and its
+recorded outcome.
+
+**Broadcast effects** are a pure function of the current frame. They show the
+recorded actions of the last 3 ticks up to that frame, fading with age, and
+never a later one:
+
+- SENSE samples are drawn in a lane of the actor's colour, dashed until the
+  recorded delivery and solid once delivered.
+- WRITE targets are drawn filled when the write took the cell, and as a ring
+  when the owner was unchanged. Core cells lost or regained are circled.
+- MOVE arrows run from the old anchor to the new one.
+- A burst marks a process hit by an opponent WRITE.
+
+Seeking, restarting or switching perspective therefore redraws the effects
+from the record, and nothing stale can remain. Core cards show each entrant's
+core cells held, the change since the last tick boundary, and a CRITICAL
+(2 or fewer) or ELIMINATED level. The decisive capture is marked on the WRITE
+that took the last core cell, and stays drawn alongside the result banner.
 
 In Broadcast, an eliminated entrant's process markers are dimmed and crossed
 out, the tick-end caption names the entrant eliminated in that tick, and the
 verified result appears as a banner only at the recorded end. The Agent A
 perspective shows none of this, because Agent A is never delivered its
-elimination or the result.
+elimination or the result. Its own MOVE and WRITE indicators, and its pending
+SENSE requests, come from `agent_a.json` alone. Its WRITE targets are drawn
+as outlines, because the outcome of a write is never delivered to it.
+
+In Agent A, End, the tick box and the slider all clamp to the last tick of
+Agent A's own record, and playback stops there. Navigating to or past the end
+therefore shows where Agent A's record ends. Nothing reveals it passively. See
+`docs/P1_READABLE_BROADCAST_REVIEW_01.md` §5.
 
 ## Showcase fixture
 

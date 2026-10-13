@@ -14,7 +14,7 @@ shows anything. The same options always give the same starting view.
 param(
     [ValidateSet("broadcast", "agent_a")][string]$Perspective = "broadcast",
     [ValidateRange(0, 1000)][int]$Tick = 0,
-    [ValidateSet(1, 5, 20, 60, 200)][int]$Speed = 5,
+    [ValidateSet(1, 2, 5, 10, 20, 60, 200)][int]$Speed = 5,
     [switch]$Play,
     [string]$Godot = $(if ($env:GODOT) { $env:GODOT } else { "C:\Program Files\Godot\Godot_v4.7.2-stable_win64.exe" }),
     # For automated launch checks: quit after this many frames (0 = stay open).
