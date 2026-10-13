@@ -1,0 +1,138 @@
+{
+  "backend": null,
+  "completed_at": "2026-10-13T01:46:12.564121Z",
+  "entrants": [
+    {
+      "agent_id": "A",
+      "alive": false,
+      "diagnostic": null,
+      "metadata": {
+        "agent_version": "1.0.0",
+        "api_version": 2,
+        "derived_seed": 50948838717215098634456624551192775867,
+        "entry_point": "agent.py:create_agent",
+        "kind": "python",
+        "local_source_fingerprint": "3deeb3210e7dedf9a7d27a92c29625a52030efab3d8403587c3ce69010f021e5",
+        "local_source_fingerprint_final": "3deeb3210e7dedf9a7d27a92c29625a52030efab3d8403587c3ce69010f021e5",
+        "processes": [
+          {
+            "process_id": "hunter",
+            "reach": 96,
+            "share": 0.5
+          },
+          {
+            "process_id": "keeper",
+            "reach": 16,
+            "share": 0.5
+          }
+        ],
+        "slot": 0,
+        "source_sha256": "9fafa7098aaa6b022489be1916e51d4405a3ab24db4a1b820be578d6870d1c74"
+      },
+      "name": "spectator_harrier",
+      "score": 476.0,
+      "statistics": {
+        "alive": false,
+        "alive_ticks": 476,
+        "cpu_total": 3638,
+        "deaths": 1,
+        "kills": 0,
+        "mem_writes": 2894,
+        "name": "spectator_harrier",
+        "score": 476.0,
+        "territory_avg": 11.30188679245283,
+        "territory_last": 9,
+        "territory_max": 17,
+        "territory_pct_avg": 2.2073997641509435,
+        "territory_pct_last": 1.7578125,
+        "territory_pct_max": 3.3203125
+      },
+      "termination_reason": "core_captured"
+    },
+    {
+      "agent_id": "B",
+      "alive": true,
+      "diagnostic": null,
+      "metadata": {
+        "agent_version": "1.0.0",
+        "api_version": 2,
+        "derived_seed": 38021326981288232741504111801721145250,
+        "entry_point": "agent.py:create_agent",
+        "kind": "python",
+        "local_source_fingerprint": "a281a76b25e52bdd8c4ffc0e9c3a3d23cd1003da9e5583bd7772cfa558b383da",
+        "local_source_fingerprint_final": "a281a76b25e52bdd8c4ffc0e9c3a3d23cd1003da9e5583bd7772cfa558b383da",
+        "processes": [
+          {
+            "process_id": "warden",
+            "reach": 56,
+            "share": 0.5
+          },
+          {
+            "process_id": "raider",
+            "reach": 112,
+            "share": 0.5
+          }
+        ],
+        "slot": 1,
+        "source_sha256": "e94dacf66726bd8100aadc38fa55258528dbbfd3378f761b2c6a18837817a600"
+      },
+      "name": "spectator_bastion",
+      "score": 482.0,
+      "statistics": {
+        "alive": true,
+        "alive_ticks": 477,
+        "cpu_total": 3778,
+        "deaths": 0,
+        "kills": 1,
+        "mem_writes": 2426,
+        "name": "spectator_bastion",
+        "score": 482.0,
+        "territory_avg": 11.230607966457024,
+        "territory_last": 15,
+        "territory_max": 19,
+        "territory_pct_avg": 2.1934781184486374,
+        "territory_pct_last": 2.9296875,
+        "territory_pct_max": 3.7109375
+      },
+      "termination_reason": null
+    }
+  ],
+  "match_id": "match_9f8de655bea65aa026c21c24",
+  "mode": "b2",
+  "occurrence_id": "f1efed81-7de5-4019-b051-f75bd7daa2ba",
+  "product_version": "5.0.0",
+  "replay": {
+    "filename": "replay.jsonl",
+    "replay_id": "match_9f8de655bea65aa026c21c24",
+    "sha256": "cd4a9ed6654faf46efec323cddb0ddf627e07e238bca09db14e6a863abf1cd28"
+  },
+  "reproducibility": {
+    "action_budget": 8,
+    "arena_size": 512,
+    "entrant_order": [
+      "A",
+      "B"
+    ],
+    "seed": 427,
+    "tick_limit": 1000,
+    "weights": {
+      "alive": 1.0,
+      "kill": 5.0,
+      "territory": 1.0,
+      "territory_bucket": 64
+    },
+    "win_mode": "score_fallback"
+  },
+  "result_id": "result_637844198a1004ced6f7b713",
+  "ruleset_id": "bytefray-rules-6-alpha1",
+  "schema": "battle2.result",
+  "schema_version": 2,
+  "score": {
+    "A": 476.0,
+    "B": 482.0
+  },
+  "status": "completed",
+  "termination_reason": "last_agent_standing",
+  "ticks": 477,
+  "winner": "B"
+}

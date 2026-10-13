@@ -9,7 +9,8 @@ code, pinned to one Bytefray commit, to turn a recorded match into
 presentation files. The Godot viewer refuses any file whose SHA-256 does not
 match the manifest.
 
-Status: **P0-B development vertical slice**. Local repository only.
+Status: **P0-C** (showcase agents and a selected showcase fixture). Local
+repository only.
 
 ## Layout
 
@@ -21,9 +22,14 @@ Status: **P0-B development vertical slice**. Local repository only.
 | `exporter/run_match.py` | Runs one alpha1 match between two agent directories (seeded placement) and writes a `match.json` run record |
 | `exporter/tests/` | Exporter, fixture and differential knowledge-isolation tests (pytest); `agents/` holds test-only opponents |
 | `fixtures/dev/` | `fixture.json` declaration, `source/` match artifacts, `presentation/` exported files |
+| `fixtures/showcase/` | The P0-C showcase match (Harrier vs Bastion, seed 427), with `selection/` evidence (`ranking.json`, `validation.json`, `examination.json`) |
+| `agents/` | Two showcase agents, `spectator_harrier` and `spectator_bastion` (see `agents/README.md`) |
+| `exporter/showcase_search.py` | Runs, measures, ranks and validates showcase candidates under `docs/P0_SHOWCASE_SELECTION_PROTOCOL.md` |
 | `project.godot`, `scenes/`, `scripts/` | Godot viewer |
 | `tests/smoke_test.gd` | Headless playback smoke test |
 | `tests/agent_view_trace.gd` | Records everything the Agent A perspective shows (used by the differential tests) |
+| `tests/fixture_check.gd` | Generic headless playback check for any fixture (`-- --fixture=<dir>`) |
+| `tests/capture_frames.gd` | Renders screenshots of a fixture (needs a real renderer, not `--headless`) |
 | `docs/` | Phase records |
 
 ## Perspectives and information boundaries
@@ -87,7 +93,8 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 # Viewer: first-time import, headless smoke test, interactive run
 & $godot --headless --path . --import
 & $godot --headless --path . --script res://tests/smoke_test.gd
-& $godot --path .                       # optional: -- --fixture=<dir>
+& $godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=res://fixtures/showcase/presentation
+& $godot --path .                       # optional: -- --fixture=res://fixtures/showcase/presentation
 ```
 
 ## Viewer controls
@@ -101,6 +108,16 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 | Tab | Switch Broadcast ↔ Agent A |
 
 The timeline slider seeks by tick.
+
+## Showcase fixture
+
+`fixtures/showcase` is the match the frozen selection protocol
+(`spectator-p0c-showcase-selection-v1`) ranked first among 1,000 public
+candidates. In it, `spectator_harrier` (seat A) plays `spectator_bastion`
+(seat B) at seed 427 under alpha1, arena 512. Bastion captures Harrier's
+core at tick 477. This is product demonstration material, not evidence about
+the agents. The selection, its digests and its reproduction are recorded in
+`docs/P0C_SHOWCASE_SELECTION_01.md`.
 
 ## Development fixture
 
