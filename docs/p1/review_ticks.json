@@ -1,0 +1,311 @@
+{
+  "review_ticks": {
+    "12": {
+      "core_cells_held": {
+        "A": 6,
+        "B": 4
+      },
+      "change_since_previous_tick": {
+        "A": 1,
+        "B": 2
+      },
+      "alive": [
+        "A",
+        "B"
+      ],
+      "core_changes_this_tick": [
+        {
+          "frame": 367,
+          "write": "B/raider 246",
+          "core_cell_lost_by": "A"
+        },
+        {
+          "frame": 371,
+          "write": "A/keeper 250",
+          "core_cell_regained_by": "A"
+        },
+        {
+          "frame": 373,
+          "write": "B/warden 171",
+          "core_cell_regained_by": "B"
+        },
+        {
+          "frame": 375,
+          "write": "B/raider 253",
+          "core_cell_lost_by": "A"
+        },
+        {
+          "frame": 377,
+          "write": "A/keeper 247",
+          "core_cell_regained_by": "A"
+        },
+        {
+          "frame": 381,
+          "write": "B/warden 172",
+          "core_cell_regained_by": "B"
+        },
+        {
+          "frame": 385,
+          "write": "A/keeper 246",
+          "core_cell_regained_by": "A"
+        },
+        {
+          "frame": 391,
+          "write": "B/raider 247",
+          "core_cell_lost_by": "A"
+        },
+        {
+          "frame": 393,
+          "write": "A/keeper 253",
+          "core_cell_regained_by": "A"
+        }
+      ],
+      "disrupted_at_tick_end": [
+        [
+          "A",
+          "hunter"
+        ]
+      ]
+    },
+    "320": {
+      "core_cells_held": {
+        "A": 4,
+        "B": 1
+      },
+      "change_since_previous_tick": {
+        "A": 0,
+        "B": -4
+      },
+      "alive": [
+        "A",
+        "B"
+      ],
+      "core_changes_this_tick": [
+        {
+          "frame": 10265,
+          "write": "A/hunter 173",
+          "core_cell_lost_by": "B"
+        },
+        {
+          "frame": 10267,
+          "write": "A/hunter 174",
+          "core_cell_lost_by": "B"
+        },
+        {
+          "frame": 10275,
+          "write": "A/hunter 168",
+          "core_cell_lost_by": "B"
+        },
+        {
+          "frame": 10277,
+          "write": "A/hunter 169",
+          "core_cell_lost_by": "B"
+        }
+      ],
+      "disrupted_at_tick_end": [
+        [
+          "A",
+          "keeper"
+        ],
+        [
+          "B",
+          "raider"
+        ],
+        [
+          "B",
+          "warden"
+        ]
+      ]
+    },
+    "447": {
+      "core_cells_held": {
+        "A": 3,
+        "B": 1
+      },
+      "change_since_previous_tick": {
+        "A": 0,
+        "B": -2
+      },
+      "alive": [
+        "A",
+        "B"
+      ],
+      "core_changes_this_tick": [
+        {
+          "frame": 14348,
+          "write": "A/keeper 251",
+          "core_cell_regained_by": "A"
+        },
+        {
+          "frame": 14350,
+          "write": "A/hunter 172",
+          "core_cell_lost_by": "B"
+        },
+        {
+          "frame": 14358,
+          "write": "A/hunter 174",
+          "core_cell_lost_by": "B"
+        },
+        {
+          "frame": 14364,
+          "write": "B/raider 251",
+          "core_cell_lost_by": "A"
+        }
+      ],
+      "disrupted_at_tick_end": [
+        [
+          "A",
+          "hunter"
+        ],
+        [
+          "A",
+          "keeper"
+        ],
+        [
+          "B",
+          "warden"
+        ]
+      ]
+    },
+    "467": {
+      "core_cells_held": {
+        "A": 2,
+        "B": 8
+      },
+      "change_since_previous_tick": {
+        "A": -1,
+        "B": 0
+      },
+      "alive": [
+        "A",
+        "B"
+      ],
+      "core_changes_this_tick": [
+        {
+          "frame": 14984,
+          "write": "B/raider 250",
+          "core_cell_lost_by": "A"
+        }
+      ],
+      "disrupted_at_tick_end": [
+        [
+          "A",
+          "keeper"
+        ]
+      ]
+    },
+    "476": {
+      "core_cells_held": {
+        "A": 2,
+        "B": 2
+      },
+      "change_since_previous_tick": {
+        "A": -3,
+        "B": -1
+      },
+      "alive": [
+        "A",
+        "B"
+      ],
+      "core_changes_this_tick": [
+        {
+          "frame": 15253,
+          "write": "B/raider 251",
+          "core_cell_lost_by": "A"
+        },
+        {
+          "frame": 15257,
+          "write": "A/hunter 173",
+          "core_cell_lost_by": "B"
+        },
+        {
+          "frame": 15261,
+          "write": "B/raider 252",
+          "core_cell_lost_by": "A"
+        },
+        {
+          "frame": 15269,
+          "write": "B/raider 253",
+          "core_cell_lost_by": "A"
+        },
+        {
+          "frame": 15271,
+          "write": "B/warden 171",
+          "core_cell_regained_by": "B"
+        },
+        {
+          "frame": 15275,
+          "write": "A/hunter 170",
+          "core_cell_lost_by": "B"
+        }
+      ],
+      "disrupted_at_tick_end": [
+        [
+          "A",
+          "keeper"
+        ]
+      ]
+    },
+    "477": {
+      "core_cells_held": {
+        "A": 0,
+        "B": 2
+      },
+      "change_since_previous_tick": {
+        "A": -2,
+        "B": 0
+      },
+      "alive": [
+        "B"
+      ],
+      "core_changes_this_tick": [
+        {
+          "frame": 15280,
+          "write": "A/hunter 171",
+          "core_cell_lost_by": "B"
+        },
+        {
+          "frame": 15282,
+          "write": "B/raider 246",
+          "core_cell_lost_by": "A"
+        },
+        {
+          "frame": 15286,
+          "write": "A/keeper 249",
+          "core_cell_regained_by": "A"
+        },
+        {
+          "frame": 15292,
+          "write": "B/warden 172",
+          "core_cell_regained_by": "B"
+        },
+        {
+          "frame": 15306,
+          "write": "B/raider 249",
+          "core_cell_lost_by": "A"
+        },
+        {
+          "frame": 15308,
+          "write": "B/raider 250",
+          "core_cell_lost_by": "A"
+        }
+      ],
+      "disrupted_at_tick_end": [
+        [
+          "A",
+          "keeper"
+        ],
+        [
+          "B",
+          "warden"
+        ]
+      ]
+    }
+  },
+  "decisive_capture": {
+    "frame": 15308,
+    "tick": 477,
+    "write": "B/raider WRITE 250",
+    "core_of": "A"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "schema": "bytefray.spectator.p1_recordings",
+  "schema_version": 1,
+  "command": "godot --path <viewer> --script res://tests/record_frames.gd -- --fixture=showcase --perspective=<p> --tick=440 --speed=5 --fps=30 --frames=256 --out=<dir>; ffmpeg -framerate 30 -i <dir>/frame-%05d.png -c:v libx264 -preset slow -crf 28 -pix_fmt yuv420p <mp4>",
+  "renderer": "Godot 4.7.2 gl_compatibility, fixed 1280x800 SubViewport, real GPU; ffmpeg 9.0.1 libx264",
+  "frames_sha256_definition": "sha256 over the concatenated sha256 digests of frame-00000.png ... frame-00255.png",
+  "note": "The baseline segments were recorded with the same record_frames.gd placed in a worktree of 0163094. P0-D's own recordings (docs/p0d/recordings) used Godot's --write-movie at a 1280x800 window; this machine's display is now 1080 px wide, so P1 renders into a SubViewport instead (capture_frames.gd reproduces all 18 committed P1-0 baseline screenshots byte-identically this way).",
+  "recordings": [
+    {
+      "file": "godot-p1-broadcast-440-477-5tps.mp4",
+      "viewer": "Godot Spectator P1 (commit d601a82)",
+      "perspective": "broadcast",
+      "segment": "ticks 440 -> 477, then holds the final frame",
+      "speed": "5 ticks/s (viewer default)",
+      "fps": 30,
+      "frames": 256,
+      "seconds": 8.53,
+      "frames_sha256": "156b089a7cdf0a31d1e3948e59832b85c6492d772e53af3b0c210aa8097919ce",
+      "sha256": "c264b8a868cb64dc71a34b24f07657efbfd414514b7e1b527730c5cce03d88e9",
+      "repeat_run": {
+        "frames_sha256": "156b089a7cdf0a31d1e3948e59832b85c6492d772e53af3b0c210aa8097919ce",
+        "mp4_sha256": "c264b8a868cb64dc71a34b24f07657efbfd414514b7e1b527730c5cce03d88e9",
+        "identical": true
+      }
+    },
+    {
+      "file": "godot-p1-agent_a-440-477-5tps.mp4",
+      "viewer": "Godot Spectator P1 (commit d601a82)",
+      "perspective": "agent_a",
+      "segment": "ticks 440 -> 477, then holds the final frame",
+      "speed": "5 ticks/s (viewer default)",
+      "fps": 30,
+      "frames": 256,
+      "seconds": 8.53,
+      "frames_sha256": "edee512f3f22a216b21ddf1567b58c3f87f778e1b1592746d0c468e1a2f042ca",
+      "sha256": "b3cafc1752434dd1bcba90ce0e82503758b73176733882fd6811477e800f22b3",
+      "repeat_run": {
+        "frames_sha256": "edee512f3f22a216b21ddf1567b58c3f87f778e1b1592746d0c468e1a2f042ca",
+        "mp4_sha256": "b3cafc1752434dd1bcba90ce0e82503758b73176733882fd6811477e800f22b3",
+        "identical": true
+      }
+    },
+    {
+      "file": "godot-baseline-broadcast-440-477-5tps.mp4",
+      "viewer": "Godot Spectator P1 baseline (commit 0163094, viewer code of f95f9ae)",
+      "perspective": "broadcast",
+      "segment": "ticks 440 -> 477, then holds the final frame",
+      "speed": "5 ticks/s (viewer default)",
+      "fps": 30,
+      "frames": 256,
+      "seconds": 8.53,
+      "frames_sha256": "a71c9d37c026ea9fd602252493b5bff5ee90ca1052955070e719fba8b5b46f19",
+      "sha256": "391663d6ca0584455873ad843c56cb07ebf703b461ada5aa16cdbdd7c9ee0d30",
+      "repeat_run": null
+    },
+    {
+      "file": "godot-baseline-agent_a-440-477-5tps.mp4",
+      "viewer": "Godot Spectator P1 baseline (commit 0163094, viewer code of f95f9ae)",
+      "perspective": "agent_a",
+      "segment": "ticks 440 -> 477, then holds the final frame",
+      "speed": "5 ticks/s (viewer default)",
+      "fps": 30,
+      "frames": 256,
+      "seconds": 8.53,
+      "frames_sha256": "e9ae0e37715f49ea823c4385aae876e120223709f6b674b13370ea719f51875f",
+      "sha256": "26a8ee231b3190c76d983dda4f3978c597f67859fbdeda248b763b8fa02e24d7",
+      "repeat_run": null
+    }
+  ]
+}
