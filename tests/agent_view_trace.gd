@@ -6,7 +6,8 @@ extends SceneTree
 ## Each line is one observation of the visible agent-perspective outputs (title,
 ## caption, side panel, position label, timeline value and range, footer, the
 ## ring view's state and banner, and since P1 the legend, the key hint and any
-## broadcast effects or core gauges the ring holds) after a viewer operation:
+## broadcast effects or core gauges the ring holds, and since the sound effects
+## the voices started since the previous line) after a viewer operation:
 ## stepping every frame, stepping ticks backwards, seeking every tick, dragging
 ## the timeline, End, the jump-to-tick box, playing at a fixed frame rate (fast,
 ## and slowly through every frame of a tick), switching in from Broadcast
@@ -51,6 +52,7 @@ func _observe(tag: String) -> String:
 		m._position_label.text, "%d/%d" % [int(m._timeline.value), int(m._timeline.max_value)],
 		m._footer.text, JSON.stringify(m._ring.state), m._ring.banner,
 		m._legend.text().replace("\n", "\\n"), JSON.stringify([m._ring.effects, m._ring.cores]), m._hint.text,
+		JSON.stringify(m.sound.take_played()),
 	])
 
 

@@ -37,7 +37,9 @@ and refuses it if any file differs from its manifest. Set `GODOT` or pass
 | `agents/` | Two showcase agents, `spectator_harrier` and `spectator_bastion` (see `agents/README.md`) |
 | `exporter/showcase_search.py` | Runs, measures, ranks and validates showcase candidates under `docs/P0_SHOWCASE_SELECTION_PROTOCOL.md` |
 | `project.godot`, `scenes/`, `scripts/` | Godot viewer (`broadcast_effects.gd`: broadcast-only effects, core status and tick summaries derived from recorded frames; `legend_view.gd`: the legend) |
+| `scripts/sound_synth.gd`, `sound_cues.gd`, `sound_effects.gd` | Procedural sound effects: PCM synthesis, cues derived from recorded frames, and the reusable player (see [Sound effects](#sound-effects)) |
 | `tests/smoke_test.gd` | Headless playback smoke test |
+| `tests/sound_check.gd` | Headless sound check: clips, cues against references from the raw files, playback, seeking, muting, throttling |
 | `tests/agent_view_trace.gd` | Records everything the Agent A perspective shows (used by the differential tests) |
 | `tests/fixture_check.gd` | Generic headless playback check for any fixture (`-- --fixture=<dir>`) |
 | `tests/capture_frames.gd` | Renders screenshots of a fixture into a fixed 1280x800 viewport (needs a real renderer, not `--headless`) |
@@ -108,6 +110,7 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 & $godot --headless --path . --import
 & $godot --headless --path . --script res://tests/smoke_test.gd
 & $godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=res://fixtures/showcase/presentation
+& $godot --headless --path . --script res://tests/sound_check.gd
 & $godot --path .                       # opens the showcase; options below
 
 # Launch options (after --): --fixture=showcase|dev|<dir>, --perspective=broadcast|agent_a,
@@ -131,6 +134,7 @@ $godot = "C:\Program Files\Godot\Godot_v4.7.2-stable_win64_console.exe"
 | Tab | Switch Broadcast ↔ Agent A |
 | - / + | Slower / faster (1, 2, 5, 10, 20, 60 or 200 ticks/s) |
 | L | Show or hide the legend |
+| M | Sound effects on or off (the **Sound** toggle; the slider beside it sets the volume) |
 | H, F1 or ? | Show or hide the keyboard help |
 
 The timeline slider seeks by tick. A key hint line is always shown.
@@ -175,6 +179,55 @@ In Agent A, End, the tick box and the slider all clamp to the last tick of
 Agent A's own record, and playback stops there. Navigating to or past the end
 therefore shows where Agent A's record ends. Nothing reveals it passively. See
 `docs/P1_READABLE_BROADCAST_REVIEW_01.md` §5.
+
+## Sound effects
+
+The viewer synthesises short sound effects (0.1 to 0.4 s) in GDScript from
+waveforms, envelopes, seeded noise and pitch glides. It uses no audio files.
+
+| Recorded event | Sound |
+| --- | --- |
+| SENSE applied | Rising radar sweep with tremolo |
+| SENSE sample delivered | Ping; a two-note ping when the sample holds anchors |
+| WRITE applied | Short energy pulse with a falling pitch and a click |
+| WRITE that takes a core cell | Deep impact with a descending tone, in the core owner's voice |
+| Process newly disrupted (tick end) | Gated, bit-crushed crackle over a low buzz |
+| MOVE applied | Swoosh: rising for a positive operand, falling for a negative one |
+| Elimination (tick end) | Low-frequency burst |
+| Recorded end with a winner | Rising arpeggio after a 0.3 s pause, in the winner's voice (no sting for a tie) |
+
+Entrant A's voice is higher and brighter, and entrant B's is lower and
+rounder. The same request always gives the same bytes.
+
+- **When sounds play.** Sounds play only during playback, for the recorded
+  frames playback has just passed, so they land with the drawn effect. Seeking,
+  stepping, dragging the timeline, Home/End, jumping, switching perspective
+  or loading a fixture cuts every sound and plays nothing for the frames
+  passed over.
+- **Pause and resume.** Pausing holds the sounds. Playing again from the same
+  position continues them, and playing from anywhere else starts from
+  silence. At the recorded end the last sounds ring out.
+- **Throttling.** Cues handed over together are merged per sound and voice,
+  and the same sound and voice does not restart within its minimum gap. At
+  most 3 sounds start per display frame, in priority order (elimination and
+  victory first, then core damage, disruption, WRITE, samples, SENSE, MOVE).
+  Starts draw on a budget of 10 per second with bursts of up to 4;
+  elimination and victory are always played. Eight voices play on their own
+  bus behind a limiter. At 5 ticks/s the showcase plays about 10 sounds per
+  second out of about 90 recorded cues per second.
+- **Agent A.** Agent A's sounds come from `agent_a.json` alone: its own
+  applied SENSE, WRITE and MOVE and its delivered samples, in A's voice.
+  Agent A is never delivered a WRITE's outcome, opponent actions,
+  disruptions, eliminations or the result, so none of these is heard. Every
+  cut also resets the throttle, so what Agent A hears never depends on
+  broadcast playback before a switch. The differential traces record the
+  sounds started, and they are identical under unobserved opponent activity.
+- **Settings.** The toggle and volume (default: on, 60%) hold for the
+  application session and are not saved to disk.
+
+Sound never feeds back into playback. The cues are computed from the frames
+playback has already shown, and positions, captions and exports are
+identical with sound on or off.
 
 ## Showcase fixture
 

@@ -45,6 +45,8 @@ GODOT = Path(os.environ.get("GODOT", "C:/Program Files/Godot/Godot_v4.7.2-stable
 TICKS = 120
 STARTS = (0, 91)  # the teaching layout: A's first scan window covers B's anchor
 UNOBSERVED = ("quiet", "busy", "split")
+# The sounds the Agent A perspective can make (scripts/sound_cues.gd AGENT_SOUNDS).
+AGENT_SOUNDS = {"sense", "receipt", "contact", "write", "move_up", "move_down"}
 
 
 def _match(root: Path, name: str, agent_a: Path, opponent: str) -> Path:
@@ -196,6 +198,17 @@ def test_viewer_agent_perspective_is_identical_under_unobserved_activity(traces:
         assert '"own_actions":' in line and f"|{legend}" in line and "|[{},[]]|" in line
     own = [json.loads(re.search(r'"own_actions":(\{.*?\]\})', line).group(1)) for line in traces["quiet"]]
     assert any(o["writes"] for o in own) and any(o["moves"] for o in own) and any(o["pending_senses"] for o in own)
+    # Sound: the voices started since the previous line are the last field. Agent A
+    # hears only its own actions and samples, in its own voice, and only while playing.
+    playing = {"play", "play-slow", "play-switch"}
+    heard = []
+    for line in traces["quiet"]:
+        started = json.loads(line.rsplit("|", 1)[1])
+        assert not started or line.split("|", 1)[0] in playing, line[:80]
+        heard += started
+    # (Window Scout only moves forward, so move_down never occurs here.)
+    assert {"sense", "contact", "write", "move_up"} <= {cue["sound"] for cue in heard} <= AGENT_SOUNDS
+    assert {cue["variant"] for cue in heard} == {0}
 
 
 @needs_godot
@@ -211,6 +224,8 @@ def test_viewer_agent_perspective_never_reveals_when_the_match_ends(traces: dict
         assert re.fullmatch(rf"Tick \d+ \(limit {TICKS}\)   [A-Z_]+   step \d+", fields[5]), fields[5]
         assert fields[6].endswith(f"/{TICKS}"), fields[6]
         assert "Result" not in fields[4] and "eliminated" not in fields[4]
+        # Agent A wins this match but is never delivered that: no outcome sounds.
+        assert {cue["sound"] for cue in json.loads(fields[-1])} <= AGENT_SOUNDS
     # The match itself ended long before the limit.
     assert ticks < TICKS
 

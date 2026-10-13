@@ -16,6 +16,12 @@ extends Control
 ## Launch options (after `--`): --fixture=showcase|dev|<dir> (default
 ## showcase), --perspective=broadcast|agent_a, --tick=<n>, --speed=<ticks/s>
 ## (one of SPEEDS) and --play.
+##
+## Sound effects play only while playing, for the recorded frames playback has
+## just passed, from the current perspective's own model (Agent A's from
+## agent_a.json alone). Every seek, step, restart, perspective switch or
+## fixture load cuts them, so a jump never replays the past. Pausing holds
+## them; resuming at the same position continues them.
 
 const FixtureLoader := preload("res://scripts/fixture_loader.gd")
 const BroadcastModel := preload("res://scripts/broadcast_model.gd")
@@ -23,6 +29,8 @@ const BroadcastEffects := preload("res://scripts/broadcast_effects.gd")
 const AgentModel := preload("res://scripts/agent_model.gd")
 const RingView := preload("res://scripts/ring_view.gd")
 const LegendView := preload("res://scripts/legend_view.gd")
+const SoundCues := preload("res://scripts/sound_cues.gd")
+const SoundEffects := preload("res://scripts/sound_effects.gd")
 
 const FIXTURES := {
 	"showcase": "res://fixtures/showcase/presentation",
@@ -44,7 +52,7 @@ const TEST_OPTIONS := ["--out=", "--ticks=", "--core-log=", "--fps=", "--frames=
 const NO_COUNTS := {"writes": 0, "took": 0, "core_hits": 0, "recovered": 0, "hits": 0, "moves": 0, "senses": 0, "reads": 0, "refused": 0}
 # Static text: the same at every position, so it reveals nothing about the match.
 const AGENT_NOTE := "Agent A is never told the outcome. Switch to Broadcast (Tab) to see it."
-const KEY_HINT := "Space play  |  Left/Right step  |  Shift+Left/Right tick  |  Home/End  |  G jump to tick  |  Tab perspective  |  -/+ speed  |  L legend  |  H help"
+const KEY_HINT := "Space play  |  Left/Right step  |  Shift+Left/Right tick  |  Home/End  |  G jump to tick  |  Tab perspective  |  -/+ speed  |  L legend  |  M sound  |  H help"
 const HELP := """Keyboard
   Space                  Play / pause
   Right / Left           Step one recorded frame
@@ -54,17 +62,20 @@ const HELP := """Keyboard
   Tab                    Switch Broadcast / Agent A
   - / +                  Slower / faster playback
   L                      Show or hide the legend
+  M                      Sound effects on / off (volume beside it)
   H or F1                Show or hide this help
 
 Playback gives every recorded action of a tick an equal, in-order share
 of its time: at 1 tick/s each one appears in turn. Effects fade over
-3 ticks; any seek redraws them from the record."""
+3 ticks; any seek redraws them from the record. Sounds play only
+while playing; a seek never replays them."""
 
 var manifest: Dictionary = {}
 var tick_limit := 0
 var sense_half_width := -1  # public ruleset constant (manifest ruleset)
 var broadcast: BroadcastModel
 var effects: BroadcastEffects
+var sound: SoundEffects
 var agent: AgentModel
 var perspective := "broadcast"
 var index := 0
@@ -76,6 +87,7 @@ var _play_base := 0  # last completed tick boundary of the playback interval
 var _play_progress := 0.0  # ticks elapsed since that boundary, in [0, 1)
 var _play_index := -1  # index playback last set (anything else means a seek)
 var _syncing_slider := false
+var _sound_paused_at: Array = []  # [perspective, index] where playback paused the sound
 
 var _ring: RingView
 var _legend: LegendView
@@ -91,6 +103,8 @@ var _perspective_button: OptionButton
 var _speed_button: OptionButton
 var _timeline: HSlider
 var _jump: LineEdit
+var _sound_toggle: CheckButton
+var _volume: HSlider
 var _controls: Array[Control] = []
 
 
@@ -142,7 +156,7 @@ func load_fixture(dir: String) -> String:
 	effects = null
 	agent = null
 	manifest = {}
-	_play_index = -1
+	_jumped()
 	load_error = _load(dir)
 	for control in _controls:
 		control.set("disabled", not load_error.is_empty())
@@ -204,19 +218,19 @@ func set_perspective(target: String) -> void:
 	perspective = target
 	_perspective_button.select(PERSPECTIVES.find(target))
 	index = current_model().index_for_tick_end(boundary)
-	_play_index = -1  # resume playback from this boundary, paced by this perspective
+	_jumped()  # resume playback from this boundary, paced by this perspective
 	_refresh()
 
 
 func restart() -> void:
 	index = 0
-	_play_index = -1
+	_jumped()
 	_refresh()
 
 
 func step_frame(delta: int) -> void:
 	index = clampi(index + delta, 0, frame_count() - 1)
-	_play_index = -1
+	_jumped()
 	_refresh()
 
 
@@ -227,7 +241,7 @@ func step_tick(delta: int) -> void:
 
 func seek_tick(tick: int) -> void:
 	index = current_model().index_for_tick_end(tick)
-	_play_index = -1
+	_jumped()
 	_refresh()
 
 
@@ -246,16 +260,42 @@ func jump_to_tick(text: String) -> bool:
 	return false
 
 
-func set_playing(value: bool) -> void:
+## Plays or pauses. Pausing holds the sound; playing again at the same
+## position continues it, anywhere else starts from silence. At the recorded
+## end (`ring_out`) the last sounds are left to finish.
+func set_playing(value: bool, ring_out: bool = false) -> void:
+	var was_playing := playing
 	playing = value and load_error.is_empty()
 	_play_index = -1
 	if _play_button:
 		_play_button.text = "Pause" if playing else "Play"
+	if playing and not was_playing:
+		if _sound_paused_at == [perspective, index]:
+			sound.resume()
+		else:
+			sound.stop_all()
+		_sound_paused_at = []
+	elif was_playing and not playing and not ring_out:
+		sound.pause()
+		_sound_paused_at = [perspective, index]
 	if not load_error.is_empty():
 		return
 	if playing:
 		_sync_play_position()
 	_refresh()  # the broadcast caption differs between playing and paused
+
+
+## Any change of position other than playback: nothing heard before it continues.
+func _jumped() -> void:
+	_play_index = -1
+	_sound_paused_at = []
+	if sound:
+		sound.stop_all()
+
+
+func set_sound_enabled(value: bool) -> void:
+	sound.set_enabled(value)
+	_sound_toggle.set_pressed_no_signal(value)
 
 
 ## Playback position from the current index: the last completed tick boundary
@@ -278,21 +318,36 @@ func _process(delta: float) -> void:
 		return
 	var model = current_model()
 	if index != _play_index:
+		_jumped()  # moved by something other than playback
 		_sync_play_position()
+	var from := index
 	_play_progress += delta * ticks_per_second
 	var whole := int(floor(_play_progress))
 	_play_base += whole
 	_play_progress -= whole
 	if _play_base >= model.max_tick:
 		index = model.index_for_tick_end(model.max_tick)
-		set_playing(false)
+		_play_sounds(from, delta)
+		set_playing(false, true)
 		return
 	# Each frame of the next tick, its TICK_END included, gets an equal share.
 	var start: int = model.index_for_tick_end(_play_base)
 	var count: int = model.index_for_tick_end(_play_base + 1) - start
 	index = start + int(floor(_play_progress * count))
 	_play_index = index
+	_play_sounds(from, delta)
 	_refresh()
+
+
+## Sounds of the recorded frames playback just passed, (from, index], from the
+## current perspective's own model.
+func _play_sounds(from: int, elapsed: float) -> void:
+	var cues: Array
+	if perspective == "broadcast":
+		cues = SoundCues.broadcast_cues(broadcast, effects, from, index)
+	else:
+		cues = SoundCues.agent_cues(agent, from, index)
+	sound.play_cues(cues, elapsed)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -322,6 +377,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			set_speed_index(SPEEDS.find(ticks_per_second) + 1)
 		KEY_L:
 			_legend.visible = not _legend.visible
+		KEY_M:
+			set_sound_enabled(not sound.is_enabled())
 		KEY_H, KEY_F1, KEY_SLASH:
 			_help.visible = not _help.visible
 		_:
@@ -626,6 +683,26 @@ func _build_ui() -> void:
 	_add_button(controls, "Go", func() -> void: jump_to_tick(_jump.text))
 	_add_button(controls, "Help", func() -> void: _help.visible = not _help.visible)
 	_controls.append_array([_perspective_button, _speed_button, _timeline])
+	# Sound settings belong to the session, not the fixture, so they stay enabled.
+	sound = SoundEffects.new()
+	add_child(sound)
+	_sound_toggle = CheckButton.new()
+	_sound_toggle.text = "Sound"
+	_sound_toggle.focus_mode = Control.FOCUS_NONE
+	_sound_toggle.button_pressed = sound.is_enabled()
+	_sound_toggle.toggled.connect(set_sound_enabled)
+	controls.add_child(_sound_toggle)
+	_volume = HSlider.new()
+	_volume.min_value = 0
+	_volume.max_value = 100
+	_volume.step = 5
+	_volume.value = round(sound.volume() * 100.0)
+	_volume.custom_minimum_size = Vector2(90, 0)
+	_volume.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_volume.focus_mode = Control.FOCUS_NONE  # Left/Right stay playback keys
+	_volume.tooltip_text = "Sound effects volume"
+	_volume.value_changed.connect(func(value: float) -> void: sound.set_volume(value / 100.0))
+	controls.add_child(_volume)
 
 	_hint = Label.new()
 	_hint.text = KEY_HINT
