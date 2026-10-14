@@ -314,7 +314,7 @@ func _play(m: Node, steps: int) -> Array:
 func _check_viewer(m: Node) -> void:
 	var sound: Node = m.sound
 	check(m._sound_toggle.button_pressed and int(m._volume.value) == 60, "the Sound toggle starts on and the volume at 60")
-	check(m._hint.text.contains("M sound") and (m._help.get_child(0) as Label).text.contains("Sound effects and announcer on / off"), "the key hint and help name the sound key")
+	check(m._hint.text.contains("M sound") and (m._help.get_child(0) as Label).text.contains("Sound effects and arcade cues on / off"), "the key hint and help name the sound key")
 	sound.take_played()
 
 	# Seeking, stepping, jumping and dragging start nothing.
@@ -584,11 +584,11 @@ func _check_announcer_assets() -> void:
 	check(crossings_late > 2 * crossings_early, "the rumble rises in pitch (%d -> %d zero crossings)" % [crossings_early, crossings_late])
 	var fight: PackedFloat32Array = Announcer.voice()["FIGHT"]
 	var at := int(round(Announcer.VOICE_AT * Announcer.MIX_RATE))
-	check(intro.size() == at + fight.size() and _rms(intro, at, intro.size()) > 0.1, "the sequence ends with the voice saying FIGHT")
+	check(intro.size() == at + fight.size() and _rms(intro, at, intro.size()) > 0.1, "the sequence ends with the original nonverbal FIGHT cue")
 	check(Announcer.intro() == intro and Announcer.rumble() == rumble, "the opening sequence is the same every time")
 	var call := Announcer.victory_call("spectator_bastion", "B")
 	var delay := int(round(Announcer.CALL_DELAY * Announcer.MIX_RATE))
-	check(_rms(call, 0, delay) == 0.0 and _rms(call, delay, call.size()) > 0.05, "the victory call waits for the victory sting, then speaks (rms %.3f, %.2f s)" % [_rms(call, delay, call.size()), call.size() / float(Announcer.MIX_RATE)])
+	check(_rms(call, 0, delay) == 0.0 and _rms(call, delay, call.size()) > 0.05, "the victory call waits for the victory sting, then plays nonverbal motifs (rms %.3f, %.2f s)" % [_rms(call, delay, call.size()), call.size() / float(Announcer.MIX_RATE)])
 
 
 func _rms(samples: PackedFloat32Array, from: int, to: int) -> float:
@@ -628,7 +628,7 @@ func _check_announcer(m: Node) -> void:
 		var started: Array = sound.take_played()
 		var length: float = m.intro_left()
 		check(length > 2.5 and started.size() == 1 and started[0]["sound"] == "intro", "%s: playing from the start begins with the opening sequence (%.2f s)" % [perspective, length])
-		check(m._caption.text == m.INTRO_CAPTION, "%s: the caption says the match starts after the announcer" % perspective)
+		check(m._caption.text == m.INTRO_CAPTION, "%s: the caption says the match starts after the opening cue" % perspective)
 		var held := true
 		var elapsed := 0.0
 		for k in 30:  # 0.5 s
@@ -729,7 +729,7 @@ func _check_announcer(m: Node) -> void:
 				before_end = before_end and (cue["sound"] != "announce" or int(cue["i"]) == m.frame_count() - 1)
 	var calls: Array = heard.filter(func(cue: Dictionary) -> bool: return cue["sound"] == "announce")
 	check(calls.size() == 1 and before_end and calls[0]["name"] == m.broadcast.entrants[entrant]["name"] and calls[0]["seat"] == winner, "one victory call, at the recorded end, for %s" % [calls])
-	check(not calls.is_empty() and Announcer.victory_words(calls[0]["name"], calls[0]["seat"]) == PackedStringArray(["BASTION", "WINS"]), "the showcase call is BASTION WINS")
+	check(not calls.is_empty() and Announcer.victory_words(calls[0]["name"], calls[0]["seat"]) == PackedStringArray(["BASTION", "WINS"]), "the showcase cue sequence is BASTION then WINS")
 	check(m._side.text.contains("Result: B spectator_bastion wins"), "the result shown is unchanged")
 	# Seeking to the end, End, and playing again from the end never call again.
 	var again: Array = []

@@ -1,34 +1,14 @@
-"""Generate the arcade announcer's voice clips (audio/announcer/).
+"""Generate original nonverbal arcade cue clips (audio/announcer/).
 
-Offline, two steps:
+The labels FIGHT, WINS and entrant names identify electronic motifs, not spoken
+words. Pure Python produces every raw PCM sample; the existing deterministic
+arcade processing produces the playback clips. No speech engine, trained model,
+voice recording or network is used. The version-2 manifest records this source
+and binds the raw and processed bytes. See docs/AUDIO_ASSETS.md.
 
-1. **Speech.** Each word is spoken once by a Windows SAPI voice
-   (``announcer_sapi.ps1``, 22050 Hz 16-bit mono) into ``raw/<word>.wav``.
-   SAPI gives the same bytes for the same voice and text. A raw clip that
-   already exists is reused unless ``--resynthesize`` is given, so the clips
-   can be reprocessed on a machine without the voice.
-2. **Announcer processing.** Pure Python with no randomness, so the processed
-   ``<word>.wav`` is a pure function of the raw clip. The steps are: trim;
-   drop the pitch by resampling (deeper and slower); a soft-square
-   low-frequency amplitude buzz (gravel); overdrive; bit-crushing (arcade
-   lo-fi); optional sample-and-hold and echo; low-pass; normalise.
-
-``voice.json`` records the voice, the settings and both digests of every
-word. The viewer verifies each clip against it, and plays nothing that does
-not verify. The viewer never runs speech synthesis and needs no network.
-
-The vocabulary is FIGHT, WINS, PLAYER, the seat letters A-D, and the spoken
-name of every agent under ``agents/`` (see ``spoken_words``). Add a future
-agent's name with ``--name <agent name>``.
-
-Intelligibility is judged by listening (docs/ANNOUNCER_LISTENING_EVALUATION_01.md).
-
-Usage::
-
-    python exporter/make_announcer_voice.py                      # reuse raw clips, reprocess
-    python exporter/make_announcer_voice.py --resynthesize       # speak every word again (Windows)
-    python exporter/make_announcer_voice.py --name spectator_new_agent
-    python exporter/make_announcer_voice.py --check              # verify voice.json and the clips
+    python exporter/make_arcade_cues.py --check
+    python exporter/make_arcade_cues.py --regenerate
+    python exporter/make_arcade_cues.py --name spectator_new_agent
 """
 
 from __future__ import annotations
@@ -39,10 +19,10 @@ sys.dont_write_bytecode = True
 
 import argparse  # noqa: E402
 import hashlib  # noqa: E402
+import io  # noqa: E402
 import json  # noqa: E402
 import math  # noqa: E402
 import re  # noqa: E402
-import subprocess  # noqa: E402
 import wave  # noqa: E402
 from array import array  # noqa: E402
 from pathlib import Path  # noqa: E402
@@ -50,23 +30,19 @@ from pathlib import Path  # noqa: E402
 SPECTATOR_ROOT = Path(__file__).resolve().parents[1]
 VOICE_DIR = SPECTATOR_ROOT / "audio" / "announcer"
 AGENTS = SPECTATOR_ROOT / "agents"
-SAPI = Path(__file__).resolve().parent / "announcer_sapi.ps1"
 
-GENERATOR = "spectator-announcer-voice-v1"
-VOICE = "Microsoft David Desktop"
+GENERATOR = "spectator-announcer-cues-v2"
+VOICE = "Original procedural arcade cues (nonverbal)"
 MIX_RATE = 22050
-SSML_RATE = "-10%"
-SSML_PITCH = "x-low"
 BASE_WORDS = ("FIGHT", "WINS", "PLAYER", "A", "B", "C", "D")
-# What the voice is given to say for a word, where the word alone is read badly.
-SPOKEN_TEXT = {"FIGHT": "Fight!", "WINS": "wins!", "A": "Ay", "B": "Bee", "C": "See", "D": "Dee"}
+# Cue labels retained for the viewer vocabulary; the clips contain no speech.
 
-# Processing settings (recorded in voice.json). A deeper resample, sample-and-hold
-# and an echo were tried and dropped as costing clarity; listening decides.
+# Processing settings (recorded in voice.json). A slower resample, sample-and-hold
+# and an echo remain optional; current cues use only the settings recorded below.
 SETTINGS = {
-    "trim_threshold": 0.004,  # trims only true silence: a soft onset (the f of FIGHT) is kept
+    "trim_threshold": 0.004,  # trims only silence; a soft oscillator onset is kept
     "trim_pad": 0.03,  # seconds kept either side
-    "pitch": 0.92,  # resampling factor: 0.92 plays 8% lower and slower (SSML already speaks x-low)
+    "pitch": 0.92,  # resampling factor: 0.92 plays the motif lower and longer
     "gravel_hz": 41.0,  # amplitude buzz frequency
     "gravel_depth": 0.25,
     "drive": 2.0,
@@ -80,7 +56,7 @@ WORD = re.compile(r"[A-Z0-9]+")
 
 
 def spoken_words(agent_name: str) -> list[str]:
-    """Spoken name of an agent: its name split on '_', '-' and spaces, upper case,
+    """Cue labels of an agent: its name split on '_', '-' and spaces, upper case,
     without a leading 'spectator' or version word (v6). spectator_bastion -> BASTION,
     v6_window_scout -> WINDOW SCOUT. Mirrors scripts/announcer.gd."""
     words = [w.upper() for w in re.split(r"[_\- ]+", agent_name) if w]
@@ -99,20 +75,27 @@ def read_wav(path: Path) -> list[float]:
     return [s / 32768.0 for s in data]
 
 
-def write_wav(path: Path, samples: list[float]) -> None:
+def wav_bytes(samples: list[float]) -> bytes:
+    """Canonical mono PCM serialization, independent of any existing WAV."""
     data = array("h", (round(max(-1.0, min(1.0, s)) * 32767) for s in samples))
     if sys.byteorder == "big":
         data.byteswap()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(path), "wb") as w:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(MIX_RATE)
         w.writeframes(data.tobytes())
+    return buffer.getvalue()
+
+
+def write_wav(path: Path, samples: list[float]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(wav_bytes(samples))
 
 
 def process(raw: list[float]) -> list[float]:
-    """The announcer voice: a pure function of the raw clip."""
+    """Arcade processing: a pure function of the original raw motif."""
     s = SETTINGS
     # Trim silence.
     loud = [n for n, v in enumerate(raw) if abs(v) > s["trim_threshold"]]
@@ -170,35 +153,66 @@ def vocabulary(extra_names: list[str]) -> list[str]:
     return list(dict.fromkeys(words))
 
 
-def synthesize(word: str, out: Path) -> None:
-    out.parent.mkdir(parents=True, exist_ok=True)
-    text = SPOKEN_TEXT.get(word, word.capitalize())
-    command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SAPI)]
-    command += ["-Voice", VOICE, "-Text", text, "-Out", str(out), "-Rate", SSML_RATE, "-Pitch", SSML_PITCH]
-    subprocess.run(command, check=True, capture_output=True, text=True)
+def cue_samples(word: str) -> list[float]:
+    """Original electronic motif from a label, with no third-party sound source."""
+    patterns = {
+        "FIGHT": (220, 330, 440), "WINS": (330, 440, 660),
+        "PLAYER": (196, 262, 330), "A": (262, 330), "B": (294, 392),
+        "C": (330, 440), "D": (349, 466),
+        "BASTION": (196, 294, 392, 588), "HARRIER": (294, 392, 588, 784),
+    }
+    digest = hashlib.sha256(word.encode("ascii")).digest()
+    notes = patterns.get(word, tuple(180 + digest[n] * 2 for n in range(3)))
+    note_frames = MIX_RATE * 12 // 100
+    samples = []
+    for frequency in notes:
+        for n in range(note_frames):
+            # Integer triangle oscillator and a short envelope. Every sample is
+            # authored by this formula; there are no sampled voices or instruments.
+            phase = (n * frequency * 65536 // MIX_RATE) % 65536
+            triangle = 32767 - abs(phase - 32768) * 2
+            envelope = min(256, n * 256 // 220, (note_frames - 1 - n) * 256 // 440)
+            samples.append(triangle * max(0, envelope) / (32768.0 * 256) * 0.6)
+    return samples
 
 
-def build(words: list[str], resynthesize: bool) -> dict:
+def generate_cue(word: str, out: Path) -> None:
+    write_wav(out, cue_samples(word))
+
+
+def build(words: list[str], regenerate: bool) -> dict:
     record: dict = {
         "generator": GENERATOR,
         "voice": VOICE,
-        "ssml": {"rate": SSML_RATE, "pitch": SSML_PITCH},
+        "schema": "bytefray.spectator.announcer",
+        "schema_version": 2,
+        "kind": "nonverbal-procedural",
+        "license": "MIT",
         "mix_rate": MIX_RATE,
         "settings": SETTINGS,
         "words": {},
     }
     previous = _load_record()
-    for word in words + [w for w in previous.get("words", {}) if w not in words]:
+    words = words + [w for w in previous.get("words", {}) if w not in words]
+    expected = {word: wav_bytes(cue_samples(word)) for word in words}
+    # Preflight all inputs before changing any file. Existing arbitrary or legacy
+    # speech bytes must never acquire procedural/MIT provenance by being reused.
+    for word in words:
+        raw = VOICE_DIR / "raw" / f"{word.lower()}.wav"
+        if raw.is_file() and not regenerate and raw.read_bytes() != expected[word]:
+            raise ValueError(f"{word}: raw bytes are not this original cue; use --regenerate to replace them")
+    for word in words:
         name = word.lower()
         raw = VOICE_DIR / "raw" / f"{name}.wav"
-        if resynthesize or not raw.is_file():
-            synthesize(word, raw)
+        if regenerate or not raw.is_file():
+            raw.parent.mkdir(parents=True, exist_ok=True)
+            raw.write_bytes(expected[word])
         processed = VOICE_DIR / f"{name}.wav"
         write_wav(processed, process(read_wav(raw)))
         with wave.open(str(processed), "rb") as w:
             seconds = round(w.getnframes() / MIX_RATE, 4)
         record["words"][word] = {
-            "text": SPOKEN_TEXT.get(word, word.capitalize()),
+            "text": word,
             "raw": f"raw/{name}.wav",
             "raw_sha256": sha256(raw),
             "file": f"{name}.wav",
@@ -219,10 +233,19 @@ def check() -> list[str]:
     """Problems with voice.json and the clips: digests, and reprocessing equality."""
     record = _load_record()
     problems = []
-    if record.get("generator") != GENERATOR or record.get("settings") != SETTINGS:
+    if (
+        record.get("generator") != GENERATOR or record.get("settings") != SETTINGS
+        or record.get("schema_version") != 2 or record.get("kind") != "nonverbal-procedural"
+    ):
         problems.append("voice.json was made by other generator settings")
     for word, entry in record.get("words", {}).items():
         raw, processed = VOICE_DIR / entry["raw"], VOICE_DIR / entry["file"]
+        if not raw.is_file() or not processed.is_file():
+            problems.append(f"{word}: cue file missing")
+            continue
+        if raw.read_bytes() != wav_bytes(cue_samples(word)):
+            problems.append(f"{word}: raw bytes do not reproduce from the original oscillator")
+            continue
         if sha256(raw) != entry["raw_sha256"] or sha256(processed) != entry["sha256"]:
             problems.append(f"{word}: digest mismatch")
             continue
@@ -236,15 +259,15 @@ def check() -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--name", action="append", default=[], help="agent name to add a spoken name for")
-    parser.add_argument("--resynthesize", action="store_true", help="speak every word again with SAPI")
+    parser.add_argument("--name", action="append", default=[], help="agent name to add an electronic motif for")
+    parser.add_argument("--regenerate", action="store_true", help="regenerate every original raw cue")
     parser.add_argument("--check", action="store_true", help="only verify voice.json and the clips")
     args = parser.parse_args(argv)
     if args.check:
         problems = check()
-        print("\n".join(problems) if problems else "announcer voice OK")
+        print("\n".join(problems) if problems else "arcade cues OK")
         return 1 if problems else 0
-    record = build(vocabulary(args.name), args.resynthesize)
+    record = build(vocabulary(args.name), args.regenerate)
     for word, entry in record["words"].items():
         print(f"{word:10} {entry['seconds']:.2f} s  {entry['sha256'][:12]}")
     return 0

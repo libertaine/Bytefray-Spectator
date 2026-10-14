@@ -57,7 +57,7 @@ const RECENT_ACTIONS := 6
 const TEST_OPTIONS := ["--out=", "--ticks=", "--core-log=", "--fps=", "--frames="]
 const NO_COUNTS := {"writes": 0, "took": 0, "core_hits": 0, "recovered": 0, "hits": 0, "moves": 0, "senses": 0, "reads": 0, "refused": 0}
 # Static text: the same at every position, so it reveals nothing about the match.
-const INTRO_CAPTION := "Get ready...  (the match starts after the announcer; seek to skip)"
+const INTRO_CAPTION := "Get ready...  (the match starts after the opening cue; seek to skip)"
 const AGENT_NOTE := "Agent A is never told the outcome. Switch to Broadcast (Tab) to see it."
 const KEY_HINT := "Space play  |  Left/Right step  |  Shift+Left/Right tick  |  Home/End  |  G jump to tick  |  Tab perspective  |  -/+ speed  |  L legend  |  M sound  |  H help"
 const HELP := """Keyboard
@@ -69,14 +69,14 @@ const HELP := """Keyboard
   Tab                    Switch Broadcast / Agent A
   - / +                  Slower / faster playback
   L                      Show or hide the legend
-  M                      Sound effects and announcer on / off (volume beside it)
+  M                      Sound effects and arcade cues on / off (volume beside it)
   H or F1                Show or hide this help
 
 Playback gives every recorded action of a tick an equal, in-order share
 of its time: at 1 tick/s each one appears in turn. Effects fade over
 3 ticks; any seek redraws them from the record. Sounds play only
 while playing; a seek never replays them. Playing from tick 0
-starts with the announcer; from a later tick it is skipped."""
+starts with the opening cue; from a later tick it is skipped."""
 
 var manifest: Dictionary = {}
 var tick_limit := 0
