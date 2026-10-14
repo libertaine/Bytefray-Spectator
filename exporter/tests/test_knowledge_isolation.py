@@ -38,8 +38,12 @@ from run_match import run_match  # noqa: E402
 from spectator_export import export  # noqa: E402
 
 ROOT = EXPORTER.parent
-BYTEFRAY_ROOT = Path(os.environ.get("BYTEFRAY_ROOT", "D:/Projects/BATTLE2")).resolve()
-SCOUT = BYTEFRAY_ROOT / "engine/src/battle_engine/data/starter_agents/v6_window_scout"
+# The exporter tests need the unpublished pinned Bytefray source. There is no default
+# location: without BYTEFRAY_ROOT they are skipped, never silently pointed elsewhere.
+BYTEFRAY_ROOT = Path(os.environ["BYTEFRAY_ROOT"]).resolve() if os.environ.get("BYTEFRAY_ROOT") else None
+needs_bytefray = pytest.mark.skipif(BYTEFRAY_ROOT is None, reason="needs unpublished pinned Bytefray source; set BYTEFRAY_ROOT")
+pytestmark = needs_bytefray
+SCOUT = BYTEFRAY_ROOT / "engine/src/battle_engine/data/starter_agents/v6_window_scout" if BYTEFRAY_ROOT else None
 AGENTS = Path(__file__).resolve().parent / "agents"
 GODOT = Path(os.environ.get("GODOT", "C:/Program Files/Godot/Godot_v4.7.2-stable_win64_console.exe"))
 TICKS = 120
@@ -248,5 +252,6 @@ def test_isolation_fixtures_leave_no_files_in_bytefray(exports: dict[str, Path])
         capture_output=True,
         text=True,
         check=True,
+        env=dict(os.environ, GIT_OPTIONAL_LOCKS="0"),  # never refresh Bytefray's index
     ).stdout
     assert status == ""

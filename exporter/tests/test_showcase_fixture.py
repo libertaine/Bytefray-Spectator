@@ -20,7 +20,10 @@ from showcase_search import PROTOCOL_ID, candidate_metrics, hard_filter_failures
 from spectator_export import _import_bytefray, export, sha256_file, verify_pin  # noqa: E402
 
 ROOT = EXPORTER.parent
-BYTEFRAY_ROOT = Path(os.environ.get("BYTEFRAY_ROOT", "D:/Projects/BATTLE2")).resolve()
+# The exporter tests need the unpublished pinned Bytefray source. There is no default
+# location: without BYTEFRAY_ROOT they are skipped, never silently pointed elsewhere.
+BYTEFRAY_ROOT = Path(os.environ["BYTEFRAY_ROOT"]).resolve() if os.environ.get("BYTEFRAY_ROOT") else None
+needs_bytefray = pytest.mark.skipif(BYTEFRAY_ROOT is None, reason="needs unpublished pinned Bytefray source; set BYTEFRAY_ROOT")
 GODOT = Path(os.environ.get("GODOT", "C:/Program Files/Godot/Godot_v4.7.2-stable_win64_console.exe"))
 FIXTURE = ROOT / "fixtures" / "showcase"
 SOURCE = FIXTURE / "source"
@@ -84,12 +87,14 @@ def test_manifest_vouches_for_presentation_and_outcome() -> None:
     assert alive_by_tick[477] == ["B"] and alive_by_tick[476] == ["A", "B"]
 
 
+@needs_bytefray
 def test_reexport_is_byte_identical(tmp_path: Path) -> None:
     export(BYTEFRAY_ROOT, SOURCE, tmp_path)
     for name in FILES:
         assert (tmp_path / name).read_bytes() == (PRESENTATION / name).read_bytes(), name
 
 
+@needs_bytefray
 def test_match_reproduces_from_frozen_inputs(tmp_path: Path) -> None:
     declaration = _json(FIXTURE / "fixture.json")
     agents = ROOT / "agents"
@@ -101,6 +106,7 @@ def test_match_reproduces_from_frozen_inputs(tmp_path: Path) -> None:
     )
 
 
+@needs_bytefray
 def test_viewer_sense_window_is_the_pinned_ruleset_value() -> None:
     """The one rule constant the viewer draws with: the public SENSE half-width."""
     source = (ROOT / "scripts" / "broadcast_effects.gd").read_text(encoding="utf-8")

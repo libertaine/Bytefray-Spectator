@@ -14,7 +14,11 @@ sys.path.insert(0, str(EXPORTER))
 
 from capture_v6_viewer import capture  # noqa: E402
 
-BYTEFRAY_ROOT = Path(os.environ.get("BYTEFRAY_ROOT", "D:/Projects/BATTLE2")).resolve()
+# The exporter tests need the unpublished pinned Bytefray source. There is no default
+# location: without BYTEFRAY_ROOT they are skipped, never silently pointed elsewhere.
+BYTEFRAY_ROOT = Path(os.environ["BYTEFRAY_ROOT"]).resolve() if os.environ.get("BYTEFRAY_ROOT") else None
+needs_bytefray = pytest.mark.skipif(BYTEFRAY_ROOT is None, reason="needs unpublished pinned Bytefray source; set BYTEFRAY_ROOT")
+pytestmark = needs_bytefray
 SOURCE = EXPORTER.parent / "fixtures" / "showcase" / "source"
 
 

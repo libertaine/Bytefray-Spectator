@@ -22,7 +22,10 @@ sys.path.insert(0, str(EXPORTER))
 from run_match import run_match  # noqa: E402
 
 ROOT = EXPORTER.parent
-BYTEFRAY_ROOT = Path(os.environ.get("BYTEFRAY_ROOT", "D:/Projects/BATTLE2")).resolve()
+# The exporter tests need the unpublished pinned Bytefray source. There is no default
+# location: without BYTEFRAY_ROOT they are skipped, never silently pointed elsewhere.
+BYTEFRAY_ROOT = Path(os.environ["BYTEFRAY_ROOT"]).resolve() if os.environ.get("BYTEFRAY_ROOT") else None
+needs_bytefray = pytest.mark.skipif(BYTEFRAY_ROOT is None, reason="needs unpublished pinned Bytefray source; set BYTEFRAY_ROOT")
 AGENTS = {"harrier": ROOT / "agents" / "spectator_harrier", "bastion": ROOT / "agents" / "spectator_bastion"}
 DEV_SEED = 900001
 # Names an agent must never touch: hidden or seed-derived knowledge, I/O, process control.
@@ -52,6 +55,7 @@ def test_agent_never_touches_hidden_knowledge(name: str) -> None:
     assert max(numbers) <= 0xFF
 
 
+@needs_bytefray
 @pytest.mark.parametrize(("a", "b"), [("harrier", "bastion"), ("bastion", "harrier")])
 def test_agents_play_legally_and_sense(tmp_path: Path, a: str, b: str) -> None:
     out = tmp_path / "match"

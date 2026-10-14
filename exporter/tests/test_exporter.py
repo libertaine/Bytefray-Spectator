@@ -1,7 +1,8 @@
 """Exporter, fixture and presentation-file checks.
 
-Requires a local Bytefray checkout whose pinned packages match bytefray.pin.json
-(BYTEFRAY_ROOT, default D:/Projects/BATTLE2) and its Python environment.
+Tests marked needs_bytefray require a local Bytefray checkout whose pinned packages
+match bytefray.pin.json, named by BYTEFRAY_ROOT, and its Python environment. Without
+BYTEFRAY_ROOT they are skipped; the others need only the committed files.
 """
 
 from __future__ import annotations
@@ -23,7 +24,10 @@ import spectator_export  # noqa: E402
 from spectator_export import ExportError, canonical_json, export, sha256_file, verify_pin  # noqa: E402
 
 ROOT = EXPORTER.parent
-BYTEFRAY_ROOT = Path(os.environ.get("BYTEFRAY_ROOT", "D:/Projects/BATTLE2")).resolve()
+# The exporter tests need the unpublished pinned Bytefray source. There is no default
+# location: without BYTEFRAY_ROOT they are skipped, never silently pointed elsewhere.
+BYTEFRAY_ROOT = Path(os.environ["BYTEFRAY_ROOT"]).resolve() if os.environ.get("BYTEFRAY_ROOT") else None
+needs_bytefray = pytest.mark.skipif(BYTEFRAY_ROOT is None, reason="needs unpublished pinned Bytefray source; set BYTEFRAY_ROOT")
 FIXTURE = ROOT / "fixtures" / "dev"
 SOURCE = FIXTURE / "source"
 PRESENTATION = FIXTURE / "presentation"
@@ -64,6 +68,7 @@ def test_manifest_vouches_for_committed_files() -> None:
     assert manifest["match"]["tick_limit"] == declaration["config"]["tick_limit"] == 1000
 
 
+@needs_bytefray
 def test_reexport_is_byte_identical_and_writes_nothing_into_bytefray(tmp_path: Path) -> None:
     before = _bytefray_snapshot()
     export(BYTEFRAY_ROOT, SOURCE, tmp_path)
@@ -72,6 +77,7 @@ def test_reexport_is_byte_identical_and_writes_nothing_into_bytefray(tmp_path: P
         assert (tmp_path / name).read_bytes() == (PRESENTATION / name).read_bytes(), name
 
 
+@needs_bytefray
 def test_fixture_regenerates_deterministically() -> None:
     declaration = json.loads((FIXTURE / "fixture.json").read_text(encoding="ascii"))
     out, pin_record, demo = make_dev_fixture.run_demo(BYTEFRAY_ROOT)
@@ -142,6 +148,7 @@ def _claim_a_won(result: dict) -> None:
         entrant["alive"] = entrant["agent_id"] == "A"
 
 
+@needs_bytefray
 def test_export_refuses_a_rewritten_outcome_even_with_rebound_digests(tmp_path: Path) -> None:
     """The demo sidecar is unsigned: rebinding it must not let a false result through."""
     source = tmp_path / "source"
@@ -162,6 +169,7 @@ def test_export_refuses_a_rewritten_outcome_even_with_rebound_digests(tmp_path: 
         ("demo.json", lambda demo: demo["config"].update(max_ticks=999), "tick limit|Digest|demo"),
     ],
 )
+@needs_bytefray
 def test_export_refuses_each_altered_source(tmp_path: Path, name: str, change, reason: str) -> None:
     source = tmp_path / "source"
     shutil.copytree(SOURCE, source)
