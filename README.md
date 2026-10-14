@@ -103,15 +103,30 @@ godot --path . -- --fixture='C:/path/to/presentation' --perspective=broadcast
 godot --path . -- --fixture=dev --perspective=agent_a --tick=100
 ```
 
+Viewer options, all passed after `--`:
+
+- `--fixture=showcase|dev|<directory>`
+- `--perspective=broadcast|agent_a`
+- `--tick=<n>`
+- `--speed=1|2|5|10|20|60|200` (ticks per second)
+- `--rendering=filled_arcs|classic`
+- `--play`
+
+The launcher takes the same choices as `-Perspective`, `-Tick`, `-Speed`,
+`-Rendering` and `-Play`.
+
+The `dev` fixture is Bytefray's sensing teaching demo, run with seed 0: Window Scout
+against a stationary opponent. It ends in a tie at the 1,000-tick limit and exists
+for development checks. The showcase is the recorded match to watch.
+
 Raw replay files are not direct Godot inputs. Only supported, verified exports can
 be opened; arbitrary replay formats are not promised compatible.
 
 ## Generate matches or exports — dependency limitation
 
 The exporter pin is **`9c81718d057c8cd021f6d1cc7938ea19881b78e1`**, naming exact
-Bytefray engine/client package bytes. This pinned dependency is unpublished and
-unavailable from the public Bytefray repository in the dependency readiness audit.
-Cloning public Bytefray or using an ordinary release does not supply an interchangeable
+Bytefray engine/client package bytes. That commit has not been published in the
+public Bytefray repository, so it is not available there. Cloning public Bytefray or using an ordinary release does not supply an interchangeable
 exporter dependency. Watching the bundled showcase is independent of this limitation;
 public clone-to-new-match reproduction is unavailable.
 
@@ -159,9 +174,34 @@ console executable for the tests that drive Godot. Then run
   them, set `BYTEFRAY_ROOT` to that checkout and keep `--basetemp` outside it. There
   is no default location.
 - Pygame is needed only for the V6 viewer comparison check.
+
 Contributions must preserve frozen agent/fixture/protocol bytes, explicit contracts
 and upstream knowledge filtering. Historical source identifiers and audio exclusions
 are explained in [historical provenance](docs/HISTORY_PROVENANCE.md).
+
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `project.godot`, `scenes/`, `scripts/` | The Godot viewer. `scripts/main.gd` is the entry point, `broadcast_effects.gd` holds broadcast-only effects, and `sound_*.gd` and `announcer.gd` play the procedural audio |
+| `fixtures/showcase/`, `fixtures/dev/` | `fixture.json` declarations, `source/` match artifacts and `presentation/` exported files. The showcase also has `selection/` evidence |
+| `agents/` | The frozen showcase agents `spectator_harrier` and `spectator_bastion` (see [agents/README.md](agents/README.md)) |
+| `audio/announcer/` | The procedural cue bank and `voice.json` (see [audio assets](docs/AUDIO_ASSETS.md)) |
+| `bytefray.pin.json` | The Bytefray commit and packages the exporter must import |
+| `exporter/spectator_export.py` | Read-only exporter: match artifacts to `broadcast.json`, `agent_a.json` and `manifest.json` |
+| `exporter/run_match.py`, `make_dev_fixture.py`, `showcase_search.py` | Match runner, development-fixture generator and showcase candidate search (all need the pinned Bytefray source) |
+| `exporter/capture_v6_viewer.py` | Renders Bytefray's own V6 sensing viewer for same-match comparison (needs the pinned source and pygame) |
+| `exporter/make_arcade_cues.py` | Generates and checks the cue bank; `--name <agent>` adds a motif for a new agent's name |
+| `exporter/tests/` | pytest suite; `agents/` holds test-only opponents |
+| `tests/*.gd` | Godot checks: smoke, fixture, memory ring (headless and native pixels) and sound. The tools are `capture_frames.gd` and `record_frames.gd` (fixed 1280x800 screenshots and frame recordings; need a real renderer), `render_announcer.gd` (renders the cues to WAV) and `agent_view_trace.gd` (records what the Agent A view shows) |
+| `launch_showcase.ps1` | Opens the showcase with a chosen perspective, tick, speed, rendering and play state |
+| `docs/` | Phase records and evidence |
+
+Further reading:
+- [the showcase selection protocol](docs/P0_SHOWCASE_SELECTION_PROTOCOL.md) and
+  [its result](docs/P0C_SHOWCASE_SELECTION_01.md);
+- [the readable broadcast review](docs/P1_READABLE_BROADCAST_REVIEW_01.md);
+- [the Filled Arcs memory visualization](docs/FILLED_ARCS_MEMORY_VISUALIZATION_01.md).
 
 ## Limits and license
 

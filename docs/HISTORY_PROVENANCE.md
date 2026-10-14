@@ -34,7 +34,9 @@ incomplete announcer:
   that does not verify, so the spoken parts of the opening and victory call are
   absent.
 - `tests/sound_check.gd` fails. No announcer clip verifies against `voice.json`, the
-  dependent opening and victory-call checks fail, and the run stops early.
+  dependent opening and victory-call checks fail, and the run stops early. Its pytest
+  wrapper, `exporter/tests/test_sound.py`, therefore fails too when Godot is present.
+- `tests/render_announcer.gd` refuses to render, because the clips do not load.
 - `exporter/make_announcer_voice.py --check` and `exporter/tests/test_announcer_voice.py`
   fail because the clips are missing.
 
