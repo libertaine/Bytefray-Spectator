@@ -1,5 +1,10 @@
 # Announcer listening evaluation (01)
 
+> Historical protocol. The original desktop speech clips, the five listening WAVs
+> and `exporter/make_announcer_voice.py` named below are not in this publication
+> lineage. The current cues are nonverbal; see [Audio assets](AUDIO_ASSETS.md).
+> No human listening result is implied.
+
 Status: **PENDING**. No human has listened yet. The automated checks
 (`tests/sound_check.gd`) cover timing, rules, names and isolation. They
 cannot tell whether the voice is understood or sounds right. This
