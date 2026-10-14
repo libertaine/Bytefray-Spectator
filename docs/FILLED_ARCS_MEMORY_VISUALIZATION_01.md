@@ -1,6 +1,8 @@
 # Filled Arc Memory Visualization — validation record (01)
 
-Date: 2026-10-13. Spectator baseline: local `main` at `4e02040`.
+> Spectator commit IDs in this publication copy identify equivalent stages in the sanitized public history. Original dates and test outcomes remain historical; frozen declarations and checksum-bound evidence are unchanged.
+
+Date: 2026-10-13. Spectator baseline: local `main` at `3d3e430`.
 Bytefray checkout: `v6-research` at `2fc3c82`; Spectator's pin remains `9c81718`.
 
 ## Behavior

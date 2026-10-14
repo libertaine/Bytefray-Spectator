@@ -1,5 +1,7 @@
 # Bytefray V6 sensing viewer — Agent A disclosure correction (proposal 01)
 
+> Spectator commit IDs in this publication copy identify equivalent stages in the sanitized public history. Original dates and test outcomes remain historical; frozen declarations and checksum-bound evidence are unchanged.
+
 For: the Bytefray lead. This is a separate Bytefray maintenance item named in
 the P1 authorization ("Separate Bytefray maintenance item"). It can be
 reviewed on its own, independently of Spectator P1.
@@ -26,7 +28,7 @@ whatever the perspective is.
 
 BF-1 and BF-2 are the same class of defect as Spectator P0-B finding F2
 (the match length shown through the Agent A label and timeline), which
-Spectator fixed in its own viewer in `ba9d69b`.
+Spectator fixed in its own viewer in `b3f3e06`.
 
 ## 2. Proposed correction (narrow)
 

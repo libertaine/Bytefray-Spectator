@@ -1,5 +1,7 @@
 # Bytefray-Spectator — P0-D human presentation evaluation (01)
 
+> Spectator commit IDs in this publication copy identify equivalent stages in the sanitized public history. Original dates and test outcomes remain historical; frozen declarations and checksum-bound evidence are unchanged.
+
 For: Project Lead. Responds to "Bytefray-Spectator — P0-D Human Presentation
 Evaluation" (2026-10-12).
 
@@ -18,8 +20,8 @@ is in Appendix A, so independent viewers can be added later.
 
 | Item | Value |
 | --- | --- |
-| Spectator commits (P0-D) | `f95f9ae` D1 presentation readiness · `b691ae2` D2 comparison evidence · this report (the commit that adds this file) |
-| Spectator base | `c616fa2` (P0-C checkpoint) |
+| Spectator commits (P0-D) | `d7a6da2` D1 presentation readiness · `342569b` D2 comparison evidence · this report (the commit that adds this file) |
+| Spectator base | `5507878` (P0-C checkpoint) |
 | Bytefray pin used by the exporter and the V6 baseline | `9c81718` (142 files verified on every export and capture) |
 | Bytefray checkout | `v6-research` HEAD `2fc3c82`, unchanged by P0-D |
 | Fixture | `fixtures/showcase`, P1 seed 427: `spectator_harrier` (A) vs `spectator_bastion` (B); Bastion captures Harrier's core at tick 477 |
@@ -32,7 +34,7 @@ was modified. `exporter/tests/test_showcase_fixture.py` re-checks every
 digest, the frozen agent trees, a byte-identical re-export and the re-run
 reproduction, and it passes. The seed search was not re-run.
 
-## 2. Phase D1: presentation readiness (commit `f95f9ae`)
+## 2. Phase D1: presentation readiness (commit `d7a6da2`)
 
 Only the listed usability items were changed. There was no visual redesign.
 
@@ -49,7 +51,7 @@ Only the listed usability items were changed. There was no visual redesign.
 
 | Check | Before (P0-C) | After (P0-D) |
 | --- | --- | --- |
-| Spectator pytest (exporter, isolation, agents, showcase, V6 capture) | 35 passed | **36 passed**, 0 skipped (3 min 59 s, on the code committed as `f95f9ae` + `b691ae2`) |
+| Spectator pytest (exporter, isolation, agents, showcase, V6 capture) | 35 passed | **36 passed**, 0 skipped (3 min 59 s, on the code committed as `d7a6da2` + `342569b`) |
 | `smoke_test.gd` (dev fixture, default fixture, launch options, tamper) | 29 / 29 | **35 / 35** |
 | `fixture_check.gd` on the showcase | 21 / 21 | **26 / 26** |
 | `fixture_check.gd` on the dev fixture | not reported | **20 / 20** (it ends at the tick limit, so the decisive-match checks do not apply) |
@@ -299,7 +301,7 @@ scores above are not intended to influence these.
 
 | ID | Item | Status |
 | --- | --- | --- |
-| M-1 | Godot Agent A drew its own core in the broadcast's solid "held" style, so a captured core looked intact. | **Fixed in D1** (`f95f9ae`): outline style and "ownership not shown" label. |
+| M-1 | Godot Agent A drew its own core in the broadcast's solid "held" style, so a captured core looked intact. | **Fixed in D1** (`d7a6da2`): outline style and "ownership not shown" label. |
 | M-2 | Godot Broadcast drew an eliminated entrant's processes at full colour (P0-C NOTE). | **Fixed in D1**: dimmed and crossed out, tested on every frame. |
 | M-3 | *Bytefray V6 viewer, not this repository:* the Agent A perspective shows the recorded result (OF-1), and its timeline reveals the record length (OF-2). | **Not fixed** (Bytefray is out of scope). Reported for the Bytefray lead's decision. |
 

@@ -1,5 +1,7 @@
 # Bytefray-Spectator — P1 readable broadcast review (01)
 
+> Spectator commit IDs in this publication copy identify equivalent stages in the sanitized public history. Original dates and test outcomes remain historical; frozen declarations and checksum-bound evidence are unchanged.
+
 For: Project Lead. Responds to "Bytefray-Spectator — P1 Readable Broadcast
 Authorization" (P0-D accepted, P1 authorized, 2026-10-12).
 
@@ -27,17 +29,17 @@ run. The evaluation kit is ready (§6).
 
 | Commit | Content |
 | --- | --- |
-| `0163094` | P1-0 baseline: screenshots of the unchanged P0-D viewer at the 9 review ticks, with the fixture digests and baseline test results (`docs/p1/baseline/`) |
-| `3393eff` | P1-1 to P1-5 implementation and tests |
-| `79378bc` | Separate Bytefray maintenance item: V6 Agent A disclosure correction proposal (`docs/BYTEFRAY_V6_AGENT_VIEW_DISCLOSURE_CORRECTION_01.md`) |
-| `39316da` | P1-6 evaluation kit (`docs/p1/evaluation/`) |
-| `95dff86` | Test fix after the first qualification run (§4.1) |
-| `d601a82` | Fixes for the independent review findings F1–F6 and test gap T1 |
-| `93db329` | Residuals from the reviewer's re-verification: F5 wording and the tick-0 switch check |
-| `bc47d3b`, `94cd0d3`, `2215425` | Evidence: after-screenshots, before/after composites, recordings, review-tick facts and `SHA256SUMS` (`docs/p1/`). The two follow-ups store `review_ticks.json` with LF and limit `SHA256SUMS` to tracked files, so it verifies on a fresh checkout. |
+| `2701485` | P1-0 baseline: screenshots of the unchanged P0-D viewer at the 9 review ticks, with the fixture digests and baseline test results (`docs/p1/baseline/`) |
+| `d46ebdb` | P1-1 to P1-5 implementation and tests |
+| `f5c0333` | Separate Bytefray maintenance item: V6 Agent A disclosure correction proposal (`docs/BYTEFRAY_V6_AGENT_VIEW_DISCLOSURE_CORRECTION_01.md`) |
+| `44d4a77` | P1-6 evaluation kit (`docs/p1/evaluation/`) |
+| `402b0a6` | Test fix after the first qualification run (§4.1) |
+| `b6e3124` | Fixes for the independent review findings F1–F6 and test gap T1 |
+| `c0af3d1` | Residuals from the reviewer's re-verification: F5 wording and the tick-0 switch check |
+| `80811dd`, `5dcf58e`, `a5d6ce3` | Evidence: after-screenshots, before/after composites, recordings, review-tick facts and `SHA256SUMS` (`docs/p1/`). The two follow-ups store `review_ticks.json` with LF and limit `SHA256SUMS` to tracked files, so it verifies on a fresh checkout. |
 | this report | The commit that adds this file and the independent review record, `docs/P1_INDEPENDENT_REVIEW_01.md` |
 
-The base was `3a88c5b` (P0-D report). The Bytefray checkout stayed at
+The base was `da8000a` (P0-D report). The Bytefray checkout stayed at
 `v6-research` HEAD `2fc3c82` throughout (§5.4).
 
 ## 2. Implemented capabilities
@@ -167,7 +169,7 @@ verifies on a fresh checkout.
 | Evidence | Content |
 | --- | --- |
 | `baseline/` | P1-0: the unchanged P0-D viewer at ticks 1, 9, 12, 320, 447, 461, 467, 476 and 477, both perspectives |
-| `after/` | The same ticks and perspectives rendered at `d601a82`. Re-rendering at the final commit `93db329` gives byte-identical images, since that commit changed only the hidden help text and a test. |
+| `after/` | The same ticks and perspectives rendered at `b6e3124`. Re-rendering at the final commit `c0af3d1` gives byte-identical images, since that commit changed only the hidden help text and a test. |
 | `side_by_side/` | 18 composites, before (left) and after (right) |
 | `recordings/` | Ticks 440→477 at 5 ticks/s, 30 fps, 256 frames: P1 and baseline, Broadcast and Agent A, with `recordings.json` |
 | `review_ticks.py`, `.json` | The review-tick facts, derived read-only from `broadcast.json` |
@@ -180,10 +182,10 @@ on the baseline code. It reproduced all 18 committed P1-0 screenshots
 **byte-identically**.
 
 **Determinism.** Two independent recordings of each P1 segment produced
-identical PNG frames and identical H.264 files. This held at both `3393eff`
-and `d601a82`:
+identical PNG frames and identical H.264 files. This held at both `d46ebdb`
+and `b6e3124`:
 
-| Recording | MP4 at `3393eff` | MP4 at `d601a82` |
+| Recording | MP4 at `d46ebdb` | MP4 at `b6e3124` |
 | --- | --- | --- |
 | Broadcast | `74011c03…cc308` | `c264b8a8…88e9` |
 | Agent A | `b3cafc17…22b3` | `b3cafc17…22b3` (unchanged) |
@@ -194,26 +196,26 @@ Agent A is unchanged because the review fixes affect Broadcast only.
 
 ### 4.1 Results
 
-| Check | P1-0 baseline (`3a88c5b`) | P1 (`93db329`) |
+| Check | P1-0 baseline (`da8000a`) | P1 (`c0af3d1`) |
 | --- | --- | --- |
 | pytest (exporter, isolation, agents, showcase, V6 capture) | 36 passed (241 s) | **37 passed** (281 s) |
 | `smoke_test.gd` | 35 / 35 | **55 / 55** |
 | `fixture_check.gd` showcase | 26 / 26 | **45 / 45** |
 | `fixture_check.gd` dev | 20 / 20 | **31 / 31** |
-| Mutation checks (12 injected defects, at `d601a82`) | — | **12 / 12 caught**, files restored byte-identically; the tick-0 switch case added in `93db329` was also shown to fail with the F2 fix reverted |
+| Mutation checks (12 injected defects, at `b6e3124`) | — | **12 / 12 caught**, files restored byte-identically; the tick-0 switch case added in `c0af3d1` was also shown to fail with the F2 fix reverted |
 | `ruff check`, `ruff format --check` | clean | clean for all P1 files |
 
 **Qualification history.** Each run used a fresh `--basetemp` under
 `Bytefray-Spectator-work/p1/` and ran against a committed tree, with HEAD,
 status and digests recorded before and after. The runs were sequential.
 
-- The first run at `39316da` gave **36 passed, 1 failed**. A new assertion
+- The first run at `44d4a77` gave **36 passed, 1 failed**. A new assertion
   located trace fields by index, but the footer and key hint contain the
   field separator, so the indexes were wrong. The viewer itself was correct,
   and the unobserved-variant equality checks in the same test had passed.
-- After the fix (`95dff86`) the suite passed 37/37.
-- After the review fixes (`d601a82`) it passed **37/37** again.
-- After the re-verification residuals (`93db329`) it passed **37/37**. This
+- After the fix (`402b0a6`) the suite passed 37/37.
+- After the review fixes (`b6e3124`) it passed **37/37** again.
+- After the re-verification residuals (`c0af3d1`) it passed **37/37**. This
   is the final qualified commit. HEAD, status and all critical digests were
   unchanged after each run.
 
@@ -279,11 +281,11 @@ The full record is `docs/P1_INDEPENDENT_REVIEW_01.md`.
 
 The reviewer was an AI agent (Claude) started by this session, with no part
 in writing P1. **It is not a human reviewer.** It worked read-only in a
-separate worktree of `3393eff` and was not allowed to run pytest. Its
+separate worktree of `d46ebdb` and was not allowed to run pytest. Its
 verdict was **ACCEPT WITH FINDINGS**, with no BLOCKER or HIGH finding. The
 developer reproduced each finding before fixing it.
 
-| ID | Severity | Finding | Fixed in `d601a82` |
+| ID | Severity | Finding | Fixed in `b6e3124` |
 | --- | --- | --- | --- |
 | F1 | MEDIUM | Delivered SENSE samples disappeared mid-tick, and the shown set depended on later frames. The test copied the same faulty bound. | Search starts at a sound bound, and the test independently scans the whole record (M9 catches the regression) |
 | F2 | LOW | Switching perspective while playing could carry the other perspective's progress through a tick (only at ticks 0–1) | Every navigation resets the playback sync (M10) |
@@ -293,7 +295,7 @@ developer reproduced each finding before fixing it.
 | F6 | NOTE | Pending samples carried their future delivery data, which was not drawn | Blanked while pending (M12) |
 | T1 | test gap | No switch-while-playing coverage | Added in three places |
 
-**Fix verification.** The same reviewer re-checked `d601a82` and confirmed
+**Fix verification.** The same reviewer re-checked `b6e3124` and confirmed
 F1–F4, F6 and T1 **VERIFIED FIXED**, with no material new issue:
 
 - **F1.** 0 frame differences against the 3-tick rule in either fixture.
@@ -302,7 +304,7 @@ F1–F4, F6 and T1 **VERIFIED FIXED**, with no material new issue:
 - **F5.** One wording residual: "1–2 ticks/s" should be "1 tick/s".
 - **T1.** One gap: the tick-0 switch case.
 
-Both were fixed in `93db329`. The new tick-0 check fails with the F2 fix
+Both were fixed in `c0af3d1`. The new tick-0 check fails with the F2 fix
 reverted. The re-verification is recorded in
 `docs/P1_INDEPENDENT_REVIEW_01.md`.
 

@@ -6,14 +6,15 @@ results. Local operational passages were generalized in three reports and one
 commit message. Original desktop-voice WAV assets whose redistribution permission
 was not established were excluded separately; see [Audio assets](AUDIO_ASSETS.md).
 
-Those transformations change commit identifiers from the first affected commit
-onward. SHA strings embedded in historical reports and checksum-bound JSON remain
-the original source identifiers under which that evidence was produced. They are
-historical provenance, not promises that the old objects can be checked out from
-this repository. Use commit subjects and development order to find the equivalent
-source stage in the current history. Frozen source/file hashes and outcome records
-were not changed to disguise commit differences. An original-to-current equivalence
-record is retained privately; no old-object refs are shipped.
+Those transformations, followed by the public email correction, change commit
+identifiers across the publication lineage. Current report references identify the
+equivalent stages in this public history, with their historical dates and test
+outcomes retained. The frozen selection protocol, fixture declarations and
+checksum-bound evidence keep the source identifiers recorded when they were
+produced. Those identifiers describe historical provenance; they do not promise
+that the old commit objects can be checked out from this repository. Frozen
+source/file hashes and outcome records are unchanged. No old-object refs or
+original-to-current mapping files are shipped.
 
 The exporter dependency pin identifies Bytefray source, rather than this companion
 repository, and remains unchanged. Historical test counts describe their original

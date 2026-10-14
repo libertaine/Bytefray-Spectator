@@ -1,5 +1,7 @@
 # Bytefray-Spectator — P0-C checkpoint report (01)
 
+> Spectator commit IDs in this publication copy identify equivalent stages in the sanitized public history. Original dates and test outcomes remain historical; frozen declarations and checksum-bound evidence are unchanged.
+
 For: Project Lead. Responds to "Bytefray-Spectator — P0-C Conditional
 Authorization" (2026-10-12). All commits are local. Nothing was pushed, no
 remote was created and nothing was released. E9 remains **LOCKED**;
@@ -14,7 +16,7 @@ retained.
 ## 2. P0-B independent review verdict
 
 **ACCEPT WITH FINDINGS — all material findings corrected** (Spectator
-`ba9d69b`; record `docs/P0B_INDEPENDENT_REVIEW_01.md`). Each finding was
+`b3f3e06`; record `docs/P0B_INDEPENDENT_REVIEW_01.md`). Each finding was
 reproduced before it was fixed.
 
 - **F1 HIGH.** The match outcome was not verified. A rewritten
@@ -23,7 +25,7 @@ reproduced before it was fixed.
   final state with the engine's rule and checked against the replay's
   digest-bound terminal record, and any disagreement is refused.
 - **F2 MEDIUM.** The Agent A label and timeline revealed when the match
-  ends. Reproduced on `371620a`: `Tick 0 / 1 … frame 1 / 18`. Now only the
+  ends. Reproduced on `2f32c23`: `Tick 0 / 1 … frame 1 / 18`. Now only the
   public tick limit is shown.
 - **F3 LOW.** The tamper test accepted any exception. Now each refusal is
   tested against its specific reason.
@@ -64,7 +66,7 @@ the unchanged official Window Scout starter, against test-only opponents.
 
 ## 4. Showcase agents and frozen source digests
 
-Frozen at Spectator `4d83cd9` (`agents/`; not Bytefray starters):
+Frozen at Spectator `1229630` (`agents/`; not Bytefray starters):
 
 | Agent | Design | Tree SHA-256 |
 | --- | --- | --- |
@@ -90,7 +92,7 @@ Frozen at Spectator `4d83cd9` (`agents/`; not Bytefray starters):
 **`spectator-p0c-showcase-selection-v1`**: `docs/P0_SHOWCASE_SELECTION_PROTOCOL.md`
 (SHA-256 `e3ceccf489fd0bc728080e6bab14c792706ff8f3d44ac63a1db6481bfe65ce08`).
 It was frozen with `exporter/showcase_search.py` (`f7147c8c…41f8`) in
-Spectator `e0c10c1`, before any candidate seed was run.
+Spectator `4eceb88`, before any candidate seed was run.
 
 The configuration is alpha1, arena 512, budget 8, 1000 ticks, seeded
 placement, P1 and P2 seat orders, and public seeds 1–500 each.
@@ -151,7 +153,7 @@ left.
 It is an **upset**: Bastion wins only 4 of the 77 qualifying matches, so the
 fixture is not representative of typical results.
 
-Artifacts are in `fixtures/showcase/` (Spectator `addd2dc`):
+Artifacts are in `fixtures/showcase/` (Spectator `d3965d8`):
 
 | File | SHA-256 |
 | --- | --- |

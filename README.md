@@ -4,6 +4,8 @@
 companion to [Bytefray](https://github.com/libertaine/Bytefray), a programmable-agent
 arena in which agents compete over a circular memory space.
 
+Spectator is a separate, experimental application maintained in its own repository.
+
 Spectator plays verified recorded matches. Watch the circular arena, cell ownership,
 process movement, WRITE attacks and SENSE observations; seek to any recorded tick
 and compare the complete Broadcast with what Agent A was actually delivered.

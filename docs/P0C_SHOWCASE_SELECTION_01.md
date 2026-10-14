@@ -1,15 +1,17 @@
 # P0-C showcase selection record (01)
 
+> Spectator commit IDs in this publication copy identify equivalent stages in the sanitized public history. Original dates and test outcomes remain historical; frozen declarations and checksum-bound evidence are unchanged.
+
 Protocol: **`spectator-p0c-showcase-selection-v1`**
 (`docs/P0_SHOWCASE_SELECTION_PROTOCOL.md`, SHA-256 `e3ceccf4…ce08`, frozen in
-commit `e0c10c1`). Agents frozen in commit `4d83cd9`. Executed 2026-10-12,
+commit `4eceb88`). Agents frozen in commit `1229630`. Executed 2026-10-12,
 locally. This is product demonstration, not evidence about agent performance.
 
 ## 1. Execution
 
 | Step | Result |
 | --- | --- |
-| Pre-run integrity | HEAD `e0c10c1`; clean tree; SHA-256 of both agents' files, every exporter script, the pin and the protocol recorded |
+| Pre-run integrity | HEAD `4eceb88`; clean tree; SHA-256 of both agents' files, every exporter script, the pin and the protocol recorded |
 | Run | 1,000 candidates (P1 and P2 × seeds 1–500), 6 worker processes, **1,000 ran, 0 failed**, about 65 s. Outputs in `D:\Projects\Bytefray-Spectator-work\p0c-search-v1\` |
 | Post-run integrity | HEAD and every recorded digest unchanged; Bytefray `engine/src` and `client/src` clean. All 1,000 `match.json` records bind the frozen agent trees, runner `9823d351…`, pin `9c81718` and seeded placement. |
 | Rank | `ranking.json` SHA-256 `885161da…213d`; search script `f7147c8c…41f8` |
