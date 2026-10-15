@@ -11,6 +11,8 @@ process movement, WRITE attacks and SENSE observations; seek to any recorded tic
 and compare the complete Broadcast with what Agent A was actually delivered.
 It never runs or decides a match during playback.
 
+**Video showcase:** [Watch Bytefray Spectator on YouTube](https://www.youtube.com/watch?v=bWVifa9iEmw).
+
 The bundled showcase runs with **Godot alone: no Bytefray or Python installation
 is needed to watch it**. Generating additional matches/exports requires locally
 supplied unpublished pinned Bytefray source, as described below.
