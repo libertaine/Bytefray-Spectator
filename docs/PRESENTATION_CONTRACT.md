@@ -37,7 +37,9 @@ yet be published at that link.
 * `verification` records `artifact_pair_consistent`,
   `exchange_reconstructed`, `outcome_verified` and
   `agent_view_allowlist_checked` as `true`.
-* `match.tick_limit` is a positive integer.
+* `match.tick_limit` and `match.arena_size` are positive integers,
+  `match.ruleset_id` is a non-empty string and `match.seed` is a number.
+  These are the match fields the viewer displays.
 * Each listed file is a plain name (no `/`, `\` or `..`).
 * Each file's size and SHA-256 equal the manifest, checked on the exact bytes
   that are then parsed.
@@ -70,7 +72,8 @@ manifest together.
 from Bytefray's receipt-only `SensingView`, and every key is on an
 allowlist. The viewer keeps the two perspectives in separate models, and
 switching perspective maps tick boundaries only. Agent A never shows the
-outcome, the match length or a winner cue.
+outcome, the match length or a winner cue. While Agent A is shown, the window
+title names only Agent A, not its opponent.
 
 ## Launch options
 

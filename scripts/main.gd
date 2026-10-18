@@ -224,8 +224,7 @@ func load_fixture(dir: String) -> String:
 		perspective = "broadcast"
 		_perspective_button.select(0)
 		index = 0
-		_refresh()
-		get_window().title = "Bytefray Spectator - %s" % _match_title()
+		_refresh()  # also sets the window title for the perspective
 	else:
 		_ring.clear()
 		_title.text = "Fixture rejected"
@@ -251,6 +250,14 @@ func _match_title() -> String:
 	for entrant in broadcast.entrants:
 		names.append(String(entrant["name"]))
 	return "%s (%s)" % [" vs ".join(names), String(manifest["match"]["ruleset_id"])]
+
+
+## The window title follows the perspective: Agent A's names only Agent A,
+## because the opponent's identity is not part of what Agent A was delivered.
+func _window_title() -> String:
+	if perspective == "agent_a":
+		return "Bytefray Spectator - Agent %s (%s) - delivered information" % [agent.entrant_id, agent.entrant_name]
+	return "Bytefray Spectator - %s" % _match_title()
 
 
 func _load(dir: String) -> String:
@@ -518,6 +525,9 @@ func _refresh() -> void:
 		_title.text = "Agent %s (%s) - delivered information only" % [agent.entrant_id, agent.entrant_name]
 		_caption.text = "Receipt: %s   Opponent activity: %s" % [state["receipt"], agent.opponent_activity]
 		_side.text = _agent_panel(state)
+	var window_title := _window_title()
+	if get_window().title != window_title:
+		get_window().title = window_title
 	if _intro_left > 0.0:
 		_caption.text = INTRO_CAPTION
 	if perspective == "broadcast":

@@ -81,12 +81,16 @@ func _check_versions(main: Node) -> void:
 	check(main._footer.text.begins_with("Verified Bytefray match  |  Bytefray %s  |" % version), "v2 footer names the exporting Bytefray: %s" % main._footer.text)
 	check(main.get_window().title.begins_with("Bytefray Spectator - ") and main.get_window().title.contains(" vs "), "the window title names the match: %s" % main.get_window().title)
 	check(main.perspective == "broadcast" and main.index == 0 and not main.playing, "a newly opened presentation starts paused at the beginning in Broadcast")
+	var opponent := String(main.broadcast.entrants[1]["name"])
 	main.set_perspective("agent_a")
 	check(main.perspective == "agent_a" and main.agent.entrant_id == "A", "Agent A perspective of a v2 presentation")
+	var agent_title: String = main.get_window().title
+	check(agent_title.contains(main.agent.entrant_name) and not agent_title.contains(opponent), "the Agent A window title never names the opponent: %s" % agent_title)
 	check(main._position_label.text.contains("(limit %d)" % int(manifest["match"]["tick_limit"])), "Agent A shows only the public tick limit")
 	main.jump_to_end()
 	check(main.current_tick() <= int(manifest["match"]["tick_limit"]), "Agent A seeks within its own record")
 	main.set_perspective("broadcast")
+	check(main.get_window().title.contains(" vs "), "the Broadcast window title names the match again")
 	main.jump_to_end()
 	check(main.current_tick() == int(manifest["match"]["ticks"]), "Broadcast reaches the recorded end of a v2 presentation")
 
@@ -141,6 +145,9 @@ func _check_rejections(main: Node) -> void:
 		"unknown exporter": [func(m: Dictionary) -> void: m["exporter"]["name"] = "someone_else", "unknown exporter"],
 		"no Bytefray version": [func(m: Dictionary) -> void: m["bytefray"].erase("version"), "no Bytefray version"],
 		"no tick limit": [func(m: Dictionary) -> void: m["match"].erase("tick_limit"), "no tick limit"],
+		"no ruleset": [func(m: Dictionary) -> void: m["match"].erase("ruleset_id"), "no ruleset"],
+		"no arena size": [func(m: Dictionary) -> void: m["match"]["arena_size"] = "512", "no arena size"],
+		"no seed": [func(m: Dictionary) -> void: m["match"].erase("seed"), "no seed"],
 		"document version 2": [func(m: Dictionary) -> void: m["presentation"]["broadcast"]["schema_version"] = 2, "unexpected schema"],
 		"path traversal": [func(m: Dictionary) -> void: m["presentation"]["agent_a"]["path"] = "../agent_a.json", "unsafe presentation path"],
 		"wrong digest": [func(m: Dictionary) -> void: m["presentation"]["broadcast"]["sha256"] = "0".repeat(64), "SHA-256 does not match"],

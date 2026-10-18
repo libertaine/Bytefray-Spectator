@@ -71,6 +71,14 @@ static func load_manifest(dir: String) -> Dictionary:
 	var tick_limit: Variant = match_info.get("tick_limit")
 	if typeof(tick_limit) not in [TYPE_INT, TYPE_FLOAT] or int(tick_limit) < 1:
 		return {"error": "manifest records no tick limit"}
+	# Every match field the viewer displays must be present and well typed.
+	if typeof(match_info.get("ruleset_id")) != TYPE_STRING or String(match_info["ruleset_id"]).is_empty():
+		return {"error": "manifest records no ruleset"}
+	var arena: Variant = match_info.get("arena_size")
+	if typeof(arena) not in [TYPE_INT, TYPE_FLOAT] or int(arena) < 1:
+		return {"error": "manifest records no arena size"}
+	if typeof(match_info.get("seed")) not in [TYPE_INT, TYPE_FLOAT]:
+		return {"error": "manifest records no seed"}
 	return {"manifest": manifest}
 
 
