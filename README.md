@@ -57,6 +57,62 @@ Or use the PowerShell launcher with your own Godot path:
 whose hashes disagree with their manifest. A first launch may take time to import
 resources. The Compatibility renderer still needs an available display/graphics driver.
 
+### Standalone build (development branch, unreleased)
+
+`packaging/` builds a single-file executable that needs neither the Godot editor,
+Bytefray nor Python. It bundles the viewer, the showcase, the development fixture,
+the production sample and the cue bank. With Godot 4.7.2 and its export templates
+installed (Editor > Manage Export Templates):
+
+```powershell
+./packaging/build.ps1                  # build/windows/bytefray-spectator.exe (+ the Linux build)
+```
+
+```bash
+GODOT=/path/to/Godot_v4.7.2-stable_linux.x86_64 packaging/build.sh   # build/linux/bytefray-spectator.x86_64
+```
+
+Each script exports, then runs the build's own `--check` on the bundled
+presentations. `--check` reports whether a presentation and the cue bank
+verify, then exits. Run the result directly:
+
+```powershell
+./build/windows/bytefray-spectator.exe
+./build/windows/bytefray-spectator.exe -- --fixture='D:/Matches/presentation' --perspective=agent_a
+```
+
+The export presets live in `packaging/export_presets.cfg`. The project-root
+`export_presets.cfg` stays git-ignored, so no signing settings are ever
+committed. These builds are not a published release. Windows builds are checked
+natively and Linux builds only headless (WSL Ubuntu 24.04), and neither has had
+human usability evaluation.
+
+## Open a presentation
+
+Use **File > Open Presentation** (Ctrl+O) and choose a presentation folder, or
+drop the folder (or its `manifest.json`) on the window. **File > Open Bundled
+Showcase** returns to the showcase. A presentation that does not verify is
+rejected and shows nothing. A newly opened presentation starts paused at
+tick 0 in Broadcast. See the [presentation contract](docs/PRESENTATION_CONTRACT.md).
+
+## Use with Bytefray Designer (development branch)
+
+Bytefray's `v6-spectator-integration` branch can launch Spectator from Agent
+Designer. For a completed two-entrant V6 alpha1 match, **View Last Match** runs
+Bytefray's production exporter in the background. The exporter verifies the
+match's result, replay and trace, then opens the verified presentation here:
+
+```text
+bytefray-spectator -- --fixture=<presentation> --perspective=broadcast
+```
+
+Point Designer at a build with `BYTEFRAY_SPECTATOR` (the executable, its folder,
+or this project folder together with `BYTEFRAY_GODOT`/`GODOT`). You can also
+unpack a build into `<Bytefray data root>/spectator/` or put
+`bytefray-spectator` on `PATH`. Every other match, and every match when
+Spectator is not found, keeps Bytefray's Pygame viewer. Spectator behaves
+identically however it is started.
+
 ## What each perspective shows
 
 **Broadcast** shows recorded ownership, processes, actions and delivered samples,
@@ -92,6 +148,7 @@ See [audio provenance and the excluded legacy speech assets](docs/AUDIO_ASSETS.m
 | L | Legend |
 | M, Sound, volume slider | Toggle / adjust effects and arcade cues |
 | H, F1 or ? | Keyboard help |
+| Ctrl+O or File menu | Open a presentation folder; File also reopens the bundled showcase or quits |
 
 The timeline seeks by tick. Playback visits the recorded exchanges in order within
 each tick; it does not simulate new decisions. Sound starts with a short opening
@@ -109,24 +166,45 @@ godot --path . -- --fixture=dev --perspective=agent_a --tick=100
 
 Viewer options, all passed after `--`:
 
-- `--fixture=showcase|dev|<directory>`
+- `--fixture=showcase|dev|sample|<directory>`
 - `--perspective=broadcast|agent_a`
 - `--tick=<n>`
 - `--speed=1|2|5|10|20|60|200` (ticks per second)
 - `--rendering=filled_arcs|classic`
 - `--play`
+- `--check`: report whether the presentation and cue bank verify, then exit (0 = both
+  verify, 1 = presentation rejected, 2 = cue bank failed)
 
 The launcher takes the same choices as `-Perspective`, `-Tick`, `-Speed`,
 `-Rendering` and `-Play`.
 
 The `dev` fixture is Bytefray's sensing teaching demo, run with seed 0: Window Scout
 against a stationary opponent. It ends in a tie at the 1,000-tick limit and exists
-for development checks. The showcase is the recorded match to watch.
+for development checks. The `sample` fixture (`fixtures/production_sample`) is one
+ordinary V6 match exported by Bytefray's production exporter (manifest version 2):
+Window Scout against Roaming Reacquirer, seed 1, 120 ticks, declared before the
+run and not selected. It also exists for development checks. The showcase is the
+recorded match to watch.
 
 Raw replay files are not direct Godot inputs. Only supported, verified exports can
 be opened; arbitrary replay formats are not promised compatible.
 
-## Generate matches or exports — dependency limitation
+## Export new matches with Bytefray (development branch)
+
+On Bytefray's `v6-spectator-integration` branch, Bytefray exports ordinary
+completed two-entrant V6 alpha1 matches itself. No pin, `match.json` or Python
+in this repository is involved:
+
+```powershell
+bytefray spectator export --source '<Bytefray match folder>' --out '<new presentation folder>'
+```
+
+The match folder holds `result.json`, `replay.jsonl` and `trace.jsonl`, which
+Designer writes for every V6 alpha1 match. The export fails closed on anything
+that does not verify. The [presentation contract](docs/PRESENTATION_CONTRACT.md)
+describes what this viewer accepts.
+
+## Generate matches or exports — dependency limitation (pinned prototype exporter)
 
 The exporter pin is **`9c81718d057c8cd021f6d1cc7938ea19881b78e1`**, naming exact
 Bytefray engine/client package bytes. That commit has not been published in the
@@ -159,8 +237,16 @@ godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=sho
 godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=dev
 godot --headless --path . --script res://tests/memory_ring_check.gd
 godot --headless --path . --script res://tests/sound_check.gd
+godot --headless --path . --script res://tests/presentation_check.gd
+godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=sample
 godot --path . --script res://tests/memory_ring_pixels.gd
 ```
+
+`presentation_check.gd` covers manifest versions 1 and 2, every rejection
+rule, repeated loading (including during playback), the File menu, the open
+dialog, drag-and-drop and launch-option parsing. `acceptance_dump.gd` records
+what the viewer shows when launched exactly as Designer launches it. The
+pytest module below uses it.
 
 The last command needs a real renderer; headless results are not native rendering
 or human validation.
@@ -178,6 +264,14 @@ console executable for the tests that drive Godot. Then run
   them, set `BYTEFRAY_ROOT` to that checkout and keep `--basetemp` outside it. There
   is no default location.
 - Pygame is needed only for the V6 viewer comparison check.
+- `exporter/tests/test_production_presentations.py` checks the bundled production
+  sample and the viewer's handling of it without Bytefray. With
+  `BYTEFRAY_PRODUCTION_ROOT` set to a Bytefray checkout that has
+  `battle_client/spectator_export.py`, it also checks two more things. The production
+  exporter must reproduce the frozen showcase documents byte for byte. And a freshly
+  played Bytefray match must export and play here with the viewer showing exactly
+  Bytefray's recorded actions, deliveries and result. Without that variable those
+  tests are reported as skipped.
 
 Contributions must preserve frozen agent/fixture/protocol bytes, explicit contracts
 and upstream knowledge filtering. Historical source identifiers and audio exclusions
@@ -189,6 +283,8 @@ are explained in [historical provenance](docs/HISTORY_PROVENANCE.md).
 | --- | --- |
 | `project.godot`, `scenes/`, `scripts/` | The Godot viewer. `scripts/main.gd` is the entry point, `broadcast_effects.gd` holds broadcast-only effects, and `sound_*.gd` and `announcer.gd` play the procedural audio |
 | `fixtures/showcase/`, `fixtures/dev/` | `fixture.json` declarations, `source/` match artifacts and `presentation/` exported files. The showcase also has `selection/` evidence |
+| `fixtures/production_sample/` | One ordinary V6 match exported by Bytefray's production exporter (manifest version 2), with its declaration and source artifacts |
+| `packaging/` | Export presets and build scripts for standalone Windows and Linux executables |
 | `agents/` | The frozen showcase agents `spectator_harrier` and `spectator_bastion` (see [agents/README.md](agents/README.md)) |
 | `audio/announcer/` | The procedural cue bank and `voice.json` (see [audio assets](docs/AUDIO_ASSETS.md)) |
 | `bytefray.pin.json` | The Bytefray commit and packages the exporter must import |
@@ -197,7 +293,7 @@ are explained in [historical provenance](docs/HISTORY_PROVENANCE.md).
 | `exporter/capture_v6_viewer.py` | Renders Bytefray's own V6 sensing viewer for same-match comparison (needs the pinned source and pygame) |
 | `exporter/make_arcade_cues.py` | Generates and checks the cue bank; `--name <agent>` adds a motif for a new agent's name |
 | `exporter/tests/` | pytest suite; `agents/` holds test-only opponents |
-| `tests/*.gd` | Godot checks: smoke, fixture, memory ring (headless and native pixels) and sound. The tools are `capture_frames.gd` and `record_frames.gd` (fixed 1280x800 screenshots and frame recordings; need a real renderer), `render_announcer.gd` (renders the cues to WAV) and `agent_view_trace.gd` (records what the Agent A view shows) |
+| `tests/*.gd` | Godot checks: smoke, fixture, presentation handling (`presentation_check.gd`), memory ring (headless and native pixels) and sound. The tools are `acceptance_dump.gd` (what the viewer shows, for comparison with Bytefray's records), `capture_frames.gd` and `record_frames.gd` (fixed 1280x800 screenshots and frame recordings; need a real renderer), `render_announcer.gd` (renders the cues to WAV) and `agent_view_trace.gd` (records what the Agent A view shows) |
 | `launch_showcase.ps1` | Opens the showcase with a chosen perspective, tick, speed, rendering and play state |
 | `docs/` | Phase records and evidence |
 
@@ -212,6 +308,8 @@ Further reading:
 This is a recorded presentation preview. Independent human usability and listening
 evaluation remain pending. Windows automated checks do not qualify other platforms
 or establish manual accessibility. The selected match is not a gameplay balance claim.
+Standalone builds and the Designer integration are development-branch work. They are
+not a published release, and the Linux build is checked only headless.
 
 [MIT LICENSE](LICENSE), copyright 2026 Rod Satterfield. The current procedural cue
 bank is project-authored PCM; no assertion of MIT rights for the excluded Microsoft
