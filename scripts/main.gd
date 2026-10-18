@@ -15,7 +15,11 @@ extends Control
 ##
 ## Launch options (after `--`): --fixture=showcase|dev|<dir> (default
 ## showcase), --perspective=broadcast|agent_a, --tick=<n>, --speed=<ticks/s>
-## (one of SPEEDS), --rendering=classic|filled_arcs and --play.
+## (one of SPEEDS), --rendering=classic|filled_arcs, --play and --check
+## (report whether the presentation verifies, then exit 0 or 1). The same
+## viewer opens any presentation directory from File > Open Presentation
+## (Ctrl+O) or by dropping the folder (or its manifest.json) on the window;
+## how it was started makes no difference to what it shows.
 ##
 ## Sound effects play only while playing, for the recorded frames playback has
 ## just passed, from the current perspective's own model (Agent A's from
@@ -41,6 +45,7 @@ const SoundEffects := preload("res://scripts/sound_effects.gd")
 const FIXTURES := {
 	"showcase": "res://fixtures/showcase/presentation",
 	"dev": "res://fixtures/dev/presentation",
+	"sample": "res://fixtures/production_sample/presentation",
 }
 const DEFAULT_FIXTURE := "res://fixtures/showcase/presentation"
 const SPEEDS := [1.0, 2.0, 5.0, 10.0, 20.0, 60.0, 200.0]  # ticks per second
@@ -53,6 +58,11 @@ const REASONS := {
 	"tick_limit": "tick limit reached",
 }
 const RECENT_ACTIONS := 6
+const MENU_OPEN := 1
+const MENU_SHOWCASE := 2
+const MENU_QUIT := 3
+# Per-viewer convenience only (the last folder opened); losing it changes nothing shown.
+const SETTINGS_PATH := "user://spectator_settings.cfg"
 # Options read by the test and capture scripts, not by the viewer.
 const TEST_OPTIONS := ["--out=", "--ticks=", "--core-log=", "--fps=", "--frames="]
 const NO_COUNTS := {"writes": 0, "took": 0, "core_hits": 0, "recovered": 0, "hits": 0, "moves": 0, "senses": 0, "reads": 0, "refused": 0}
@@ -61,6 +71,7 @@ const INTRO_CAPTION := "Get ready...  (the match starts after the opening cue; s
 const AGENT_NOTE := "Agent A is never told the outcome. Switch to Broadcast (Tab) to see it."
 const KEY_HINT := "Space play  |  Left/Right step  |  Shift+Left/Right tick  |  Home/End  |  G jump to tick  |  Tab perspective  |  -/+ speed  |  L legend  |  M sound  |  H help"
 const HELP := """Keyboard
+  Ctrl+O                 Open a presentation folder (File menu)
   Space                  Play / pause
   Right / Left           Step one recorded frame
   Shift+Right / Left     Step one tick
@@ -116,20 +127,43 @@ var _jump: LineEdit
 var _sound_toggle: CheckButton
 var _volume: HSlider
 var _controls: Array[Control] = []
+var _file_menu: MenuButton
+var _open_dialog: FileDialog
+var fixture_dir := ""  # the presentation directory currently loaded (or rejected)
 
 
 func _ready() -> void:
 	_build_ui()
+	get_window().files_dropped.connect(_on_files_dropped)
 	var options := launch_options(OS.get_cmdline_user_args())
-	if load_fixture(options["fixture"]).is_empty():
+	var error := load_fixture(options["fixture"])
+	if error.is_empty():
 		apply_launch_options(options)
+	if options["check"]:
+		# Installation check (also for exported builds, which carry no test
+		# scripts): report whether the presentation verifies (exit 1 if not)
+		# and whether the packaged cue bank verifies (exit 2 if not).
+		if error.is_empty():
+			print("PRESENTATION OK: %s, %d broadcast frames, %d Agent A frames, manifest version %d" % [
+				_match_title(), broadcast.frame_count(), agent.frame_count(), FixtureLoader.manifest_version(manifest),
+			])
+		else:
+			printerr("PRESENTATION REJECTED: ", error)
+		var clips: int = SoundEffects.Announcer.voice().size()
+		var problems: PackedStringArray = SoundEffects.Announcer.load_problems
+		if problems.is_empty():
+			print("CUE BANK OK: %d clips verified" % clips)
+		else:
+			printerr("CUE BANK PROBLEMS: ", ", ".join(problems))
+		get_tree().quit(1 if not error.is_empty() else 2 if not problems.is_empty() else 0)
 
 
 ## Parses launch options; an unrecognised value is reported and ignored.
 static func launch_options(args: PackedStringArray) -> Dictionary:
-	var options := {"fixture": DEFAULT_FIXTURE, "perspective": "broadcast", "tick": -1, "speed": -1, "play": false, "rendering": "filled_arcs"}
+	var options := {"fixture": DEFAULT_FIXTURE, "perspective": "broadcast", "tick": -1, "speed": -1, "play": false, "rendering": "filled_arcs", "check": false}
 	for arg in args:
-		var value := arg.get_slice("=", 1)
+		# Everything after the first "=", so a directory may itself contain "=".
+		var value := arg.substr(arg.find("=") + 1) if arg.contains("=") else ""
 		if arg.begins_with("--fixture="):
 			options["fixture"] = FIXTURES.get(value, value)
 		elif arg.begins_with("--perspective=") and PERSPECTIVES.has(value):
@@ -142,6 +176,8 @@ static func launch_options(args: PackedStringArray) -> Dictionary:
 			options["rendering"] = value
 		elif arg == "--play":
 			options["play"] = true
+		elif arg == "--check":
+			options["check"] = true
 		elif not TEST_OPTIONS.any(func(prefix: String) -> bool: return arg.begins_with(prefix)):
 			printerr("Ignoring unrecognised launch option: ", arg)
 	return options
@@ -172,12 +208,15 @@ func set_speed_index(i: int) -> void:
 
 func load_fixture(dir: String) -> String:
 	playing = false
+	if _play_button:
+		_play_button.text = "Play"  # a presentation opened during playback starts paused
 	broadcast = null
 	effects = null
 	agent = null
 	manifest = {}
 	_jumped()
-	load_error = _load(dir)
+	fixture_dir = dir if dir.begins_with("res://") or dir.begins_with("user://") else dir.replace("\\", "/")
+	load_error = _load(fixture_dir)
 	for control in _controls:
 		control.set("disabled", not load_error.is_empty())
 	_jump.editable = load_error.is_empty()
@@ -186,6 +225,7 @@ func load_fixture(dir: String) -> String:
 		_perspective_button.select(0)
 		index = 0
 		_refresh()
+		get_window().title = "Bytefray Spectator - %s" % _match_title()
 	else:
 		_ring.clear()
 		_title.text = "Fixture rejected"
@@ -193,7 +233,24 @@ func load_fixture(dir: String) -> String:
 		_caption.text = load_error
 		_side.text = ""
 		_footer.text = "Nothing is shown from an unverified fixture."
+		get_window().title = "Bytefray Spectator - presentation rejected"
 	return load_error
+
+
+## Opens a presentation chosen by the user (File menu, drop or a test) the same
+## way a launch option does, from the start of the match, paused.
+func open_presentation(dir: String) -> String:
+	var error := load_fixture(dir)
+	if error.is_empty() and not dir.begins_with("res://"):
+		_remember_directory(fixture_dir)
+	return error
+
+
+func _match_title() -> String:
+	var names: PackedStringArray = []
+	for entrant in broadcast.entrants:
+		names.append(String(entrant["name"]))
+	return "%s (%s)" % [" vs ".join(names), String(manifest["match"]["ruleset_id"])]
 
 
 func _load(dir: String) -> String:
@@ -400,7 +457,13 @@ func _play_sounds(from: int, elapsed: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventKey and event.pressed) or not load_error.is_empty():
+	if not (event is InputEventKey and event.pressed):
+		return
+	if event.keycode == KEY_O and event.is_command_or_control_pressed():
+		show_open_dialog()  # also from a rejected presentation: the way out of it
+		get_viewport().set_input_as_handled()
+		return
+	if not load_error.is_empty():
 		return
 	match event.keycode:
 		KEY_SPACE:
@@ -467,8 +530,10 @@ func _refresh() -> void:
 	_timeline.value = tick
 	_syncing_slider = false
 	var match_info: Dictionary = manifest["match"]
-	_footer.text = "Verified fixture  |  Bytefray %s  |  %s  |  arena %d  |  seed %d  |  manifest digests OK" % [
-		String(manifest["bytefray"]["commit"]).substr(0, 7), match_info["ruleset_id"],
+	# Version 1 (pinned prototype fixtures) keeps its original wording exactly.
+	_footer.text = "%s  |  Bytefray %s  |  %s  |  arena %d  |  seed %d  |  manifest digests OK" % [
+		"Verified fixture" if FixtureLoader.manifest_version(manifest) == 1 else "Verified Bytefray match",
+		FixtureLoader.source_label(manifest), match_info["ruleset_id"],
 		int(match_info["arena_size"]), int(match_info["seed"]),
 	]
 
@@ -659,6 +724,17 @@ func _build_ui() -> void:
 
 	var header := HBoxContainer.new()
 	root.add_child(header)
+	_file_menu = MenuButton.new()
+	_file_menu.text = "File"
+	_file_menu.flat = false
+	var file_popup := _file_menu.get_popup()
+	file_popup.add_item("Open Presentation...", MENU_OPEN)
+	file_popup.set_item_shortcut(file_popup.get_item_index(MENU_OPEN), _shortcut(KEY_O))
+	file_popup.add_item("Open Bundled Showcase", MENU_SHOWCASE)
+	file_popup.add_separator()
+	file_popup.add_item("Quit", MENU_QUIT)
+	file_popup.id_pressed.connect(_on_file_menu)
+	header.add_child(_file_menu)
 	_title = Label.new()
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title.add_theme_font_size_override("font_size", 20)
@@ -783,6 +859,66 @@ func _build_ui() -> void:
 	_help.add_child(help_text)
 	add_child(_help)
 	_help.resized.connect(func() -> void: _help.position = ((size - _help.size) / 2.0).floor())
+
+
+static func _shortcut(keycode: Key) -> Shortcut:
+	var key := InputEventKey.new()
+	key.keycode = keycode
+	key.command_or_control_autoremap = true
+	var shortcut := Shortcut.new()
+	shortcut.events = [key]
+	return shortcut
+
+
+func _on_file_menu(id: int) -> void:
+	match id:
+		MENU_OPEN:
+			show_open_dialog()
+		MENU_SHOWCASE:
+			open_presentation(DEFAULT_FIXTURE)
+		MENU_QUIT:
+			get_tree().quit()
+
+
+## File > Open Presentation: choose a presentation folder (manifest.json,
+## broadcast.json, agent_a.json). Nothing is shown unless it verifies.
+func show_open_dialog() -> void:
+	if _open_dialog == null:
+		_open_dialog = FileDialog.new()
+		_open_dialog.title = "Open Presentation Folder"
+		_open_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+		_open_dialog.access = FileDialog.ACCESS_FILESYSTEM
+		_open_dialog.use_native_dialog = DisplayServer.has_feature(DisplayServer.FEATURE_NATIVE_DIALOG_FILE)
+		_open_dialog.dir_selected.connect(func(dir: String) -> void: open_presentation(dir))
+		add_child(_open_dialog)
+	var last := _last_directory()
+	if last != "" and DirAccess.dir_exists_absolute(last):
+		_open_dialog.current_dir = last
+	_open_dialog.popup_centered_ratio(0.6)
+
+
+## A folder (or a manifest.json inside one) dropped on the window opens like File > Open.
+func _on_files_dropped(files: PackedStringArray) -> void:
+	if files.is_empty():
+		return
+	var path := files[0].replace("\\", "/")
+	if not DirAccess.dir_exists_absolute(path):
+		path = path.get_base_dir()
+	open_presentation(path)
+
+
+func _last_directory() -> String:
+	var settings := ConfigFile.new()
+	if settings.load(SETTINGS_PATH) != OK:
+		return ""
+	return String(settings.get_value("open", "last_parent", ""))
+
+
+func _remember_directory(dir: String) -> void:
+	var settings := ConfigFile.new()
+	settings.load(SETTINGS_PATH)  # a missing or unreadable file just starts empty
+	settings.set_value("open", "last_parent", dir.get_base_dir())
+	settings.save(SETTINGS_PATH)
 
 
 func _add_button(parent: Control, text: String, callback: Callable) -> Button:

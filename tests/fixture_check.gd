@@ -202,8 +202,11 @@ func _run(main: Node) -> void:
 		check(held, "%s: the opening sequence holds tick 0" % perspective)
 		for i in 10:
 			main._process(0.1)
-		check(main.current_tick() == 20, "%s plays 20 ticks in 1 s at 20 ticks/s (got %d)" % [perspective, main.current_tick()])
+		# A match shorter than 20 ticks has already reached its end (and stopped).
+		var expected := mini(20, ticks)
+		check(main.current_tick() == expected, "%s plays %d ticks in 1 s at 20 ticks/s (got %d)" % [perspective, expected, main.current_tick()])
 		main.seek_tick(ticks - 1)
+		main.set_playing(true)
 		for i in 10:
 			main._process(0.1)
 		check(not main.playing and main.current_tick() == ticks, "%s playback stops at the end" % perspective)
