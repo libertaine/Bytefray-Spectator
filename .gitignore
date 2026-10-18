@@ -5,6 +5,8 @@
 # so they use Godot's "Keep File" importer to be exported unchanged.
 !audio/announcer/*.wav.import
 export_presets.cfg
+# The tracked, credential-free presets the packaging scripts copy into place.
+!packaging/export_presets.cfg
 /build/
 
 # Python
