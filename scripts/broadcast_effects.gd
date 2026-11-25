@@ -1,7 +1,7 @@
 extends RefCounted
-## Broadcast-only transient effects, core status and tick summaries, derived
-## from the recorded broadcast.json frames. The Agent A perspective never uses
-## this model.
+## Broadcast-only transient effects, core status, tactical turning points and
+## tick summaries, derived from the recorded broadcast.json frames. The Agent A
+## perspective never uses this model.
 ##
 ## Every query is a pure function of the frame index. An effect is shown at
 ## index i only if its recorded frame is at or before i, so nothing can show a
@@ -11,16 +11,18 @@ extends RefCounted
 ##
 ## Nothing is simulated. A SENSE sample's contents are the recorded `sensed`
 ## anchors of its ACTION frame. Its delivery is the recorded `sensed` field of
-## the same process's next OBSERVATION frame. Ownership changes are the recorded
-## owner_changes, a disruption is the recorded tick-end `disrupted` set and an
-## elimination is the recorded `alive` set. The only rule constant is the
-## ruleset's public SENSE half-width, used to draw the sampled window; the
+## the same process's next OBSERVATION frame. READ discoveries come from the
+## recorded cell owners and core ranges at the READ frame. Ownership changes are
+## the recorded owner_changes, a disruption is the recorded tick-end `disrupted`
+## set and an elimination is the recorded `alive` set. The only rule constant is
+## the ruleset's public SENSE half-width, used to draw the sampled window; the
 ## exporter tests check it against the pinned Bytefray ruleset.
 
 const PHASE_OBSERVATION := 0
 const PHASE_ACTION := 1
 const PHASE_TICK_END := 2
 const EFFECT_TICKS := 3
+const TURNING_POINT_LIMIT := 6
 ## Public SENSE half-width per ruleset (Bytefray RulesetPolicy.sensing_window).
 const SENSE_HALF_WIDTH := {"bytefray-rules-6-alpha1": 27}
 
@@ -36,6 +38,8 @@ var _sense_span := 0  # longest frame span from a SENSE to its delivery (or the 
 var _tick_event_frames := PackedInt32Array()
 var _core_at_tick_end: Dictionary = {}  # tick -> PackedInt32Array of core cells held per entrant
 var _delivery_frames: Dictionary = {}  # OBSERVATION frame index -> SENSE action record
+var _turning_points: Array = []  # ordered milestone records {"i", "t", "entrant", "actor", "kind", "text"}
+var _turning_point_frames := PackedInt32Array()
 
 
 func _init(model) -> void:
@@ -47,13 +51,35 @@ func _init(model) -> void:
 	var core_of := PackedInt32Array()
 	core_of.resize(cells)
 	core_of.fill(-1)
+	var core_base := PackedInt32Array()
+	core_base.resize(entrant_count)
+	core_base.fill(-1)
+	var last_core_read: Array = []
+	var seen_enemy_read: Array = []
+	var seen_enemy_core_owner: Array = []
 	for e in entrant_count:
-		for cell in model.entrants[e]["core"]:
+		var core_cells: Array = model.entrants[e]["core"]
+		if not core_cells.is_empty():
+			core_base[e] = int(core_cells[0])
+		var own_core_state := {}
+		for cell in core_cells:
 			core_of[int(cell)] = e
+			own_core_state[int(cell)] = e
+		last_core_read.append(own_core_state)
+		seen_enemy_read.append({})
+		seen_enemy_core_owner.append({})
 	var owners := PackedInt32Array()
 	owners.resize(cells)
 	owners.fill(-1)
 	var pending: Dictionary = {}  # "entrant/process" -> SENSE action record
+	var deployed: Dictionary = {}  # "entrant/process" -> true after first move off core_base
+	var had_deployment: Dictionary = {}  # entrant index -> true
+	var had_contact: Dictionary = {}  # actor id -> true
+	var active_contacts: Dictionary = {}  # actor id -> Dictionary (address -> true)
+	var had_core_damage: Dictionary = {}  # core owner index -> true
+	var in_critical: Dictionary = {}  # core owner index -> true
+	var last_recovery_tick: Dictionary = {}  # core owner index -> tick
+	var previous_disrupted: Array = []
 	for i in frames.size():
 		var frame: Dictionary = frames[i]
 		var phase := int(frame["p"])
@@ -68,7 +94,11 @@ func _init(model) -> void:
 			for change in frame.get("owner_changes", []):
 				owners[int(change[0])] = model.owner_code(change[1])
 		if phase == PHASE_ACTION and frame["kind"] != null:
-			var record := _action_record(i, frame, frames[i - 1], owners, before, core_of)
+			var record := _action_record(
+				i, frame, frames[i - 1], owners, before, core_of, core_base,
+				deployed, had_deployment, last_core_read, seen_enemy_read,
+				seen_enemy_core_owner, had_core_damage, in_critical, last_recovery_tick
+			)
 			_action_frames.append(i)
 			actions.append(record)
 			if record["kind"] == "sense" and record["outcome"] == "applied":
@@ -82,10 +112,11 @@ func _init(model) -> void:
 			if not sense.is_empty() and sense["sensed"] == frame["sensed"]:
 				sense["delivered"] = i
 				sense["receiver"] = _anchor(frame, String(frame["actor"]), String(frame["process"]))
+				_classify_delivery(i, frame, sense, cells, had_contact, active_contacts)
 				_delivery_frames[i] = sense
 				pending.erase(key)
 		elif phase == PHASE_TICK_END:
-			_end_of_tick(i, frame, owners)
+			previous_disrupted = _end_of_tick(i, frame, owners, previous_disrupted)
 	for k in _sense_actions.size():
 		var sense: Dictionary = actions[_sense_actions[k]]
 		var until: int = sense["delivered"] if sense["delivered"] >= 0 else frames.size()
@@ -93,18 +124,28 @@ func _init(model) -> void:
 	_mark_decisive()
 
 
-func _action_record(i: int, frame: Dictionary, previous: Dictionary, owners: PackedInt32Array, before: int, core_of: PackedInt32Array) -> Dictionary:
+func _action_record(
+	i: int, frame: Dictionary, previous: Dictionary, owners: PackedInt32Array,
+	before: int, core_of: PackedInt32Array, core_base: PackedInt32Array,
+	deployed: Dictionary, had_deployment: Dictionary, last_core_read: Array,
+	seen_enemy_read: Array, seen_enemy_core_owner: Array,
+	had_core_damage: Dictionary, in_critical: Dictionary, last_recovery_tick: Dictionary
+) -> Dictionary:
 	var actor := String(frame["actor"])
 	var process := String(frame["process"])
 	var kind := String(frame["kind"])
 	var applied: bool = frame["status"] == "APPLIED"
+	var tick := int(frame["t"])
+	var entrant := int(_model.entrant_index.get(actor, -1))
 	var record := {
-		"i": i, "t": int(frame["t"]), "entrant": int(_model.entrant_index.get(actor, -1)),
+		"i": i, "t": tick, "entrant": entrant,
 		"actor": actor, "process": process, "kind": kind, "status": frame["status"],
 		"address": -1 if frame["address"] == null else int(frame["address"]),
 		"source": _anchor(previous, actor, process),
 		"outcome": "applied" if applied else "refused",
-		"core_owner": -1, "core_change": "", "hits": [], "decisive_from": -1,
+		"before_owner": before, "core_owner": -1, "core_change": "",
+		"read_kind": "", "read_discovery": false, "deployment": false, "sense_kind": "",
+		"hits": [], "decisive_from": -1,
 		"from": -1, "delta": 0, "sensed": null, "delivered": -1, "receiver": -1,
 	}
 	if kind == "write" and applied:
@@ -115,8 +156,26 @@ func _action_record(i: int, frame: Dictionary, previous: Dictionary, owners: Pac
 		record["core_owner"] = core
 		if core >= 0 and before == core and after != core:
 			record["core_change"] = "damage"
+			var held := _count_core_held(core, owners)
+			var core_size := (_model.entrants[core]["core"] as Array).size()
+			var core_id := String(_model.entrants[core]["id"])
+			if not had_core_damage.has(core):
+				had_core_damage[core] = true
+				_add_turning_point(i, tick, entrant, actor, "core_damage", "t%d %s/%s WRITE %d: %s core damaged (%d/%d)" % [tick, actor, process, address, core_id, held, core_size])
+			if held > 0 and held <= 2 and not in_critical.has(core):
+				in_critical[core] = true
+				_add_turning_point(i, tick, entrant, actor, "core_critical", "t%d %s/%s WRITE %d: %s core critical (%d/%d)" % [tick, actor, process, address, core_id, held, core_size])
 		elif core >= 0 and after == core and before != core:
 			record["core_change"] = "recovery"
+			(last_core_read[core] as Dictionary)[address] = core
+			var held := _count_core_held(core, owners)
+			var core_size := (_model.entrants[core]["core"] as Array).size()
+			var core_id := String(_model.entrants[core]["id"])
+			if held > 2:
+				in_critical.erase(core)
+			if int(last_recovery_tick.get(core, -1)) != tick:
+				last_recovery_tick[core] = tick
+				_add_turning_point(i, tick, entrant, actor, "core_recovery", "t%d %s/%s WRITE %d: %s core recovered (%d/%d)" % [tick, actor, process, address, core_id, held, core_size])
 		# A WRITE on the cell an opponent process stands on (recorded anchors).
 		for anchor in frame["anchors"]:
 			if anchor[0] != actor and int(anchor[2]) == address and (frame["alive"] as Array).has(anchor[0]):
@@ -129,29 +188,143 @@ func _action_record(i: int, frame: Dictionary, previous: Dictionary, owners: Pac
 			delta -= _model.arena_size
 		record["from"] = from
 		record["delta"] = delta
+		var proc_key := "%s/%s" % [actor, process]
+		if entrant >= 0 and not deployed.has(proc_key) and from == core_base[entrant] and to != core_base[entrant]:
+			deployed[proc_key] = true
+			record["deployment"] = true
+			if not had_deployment.has(entrant):
+				had_deployment[entrant] = true
+				_add_turning_point(i, tick, entrant, actor, "deployment", "t%d %s/%s MOVE %d -> %d: deploys from core" % [tick, actor, process, from, to])
 	elif kind == "sense" and applied:
 		record["sensed"] = (frame["sensed"] as Array).duplicate()
+	elif kind == "read" and applied:
+		var address: int = record["address"]
+		var core := core_of[address]
+		record["core_owner"] = core
+		if entrant >= 0 and core == entrant:
+			if before != entrant:
+				record["read_kind"] = "own_core_damaged"
+				if int((last_core_read[entrant] as Dictionary).get(address, entrant)) == entrant:
+					record["read_discovery"] = true
+					var holder := String(_model.entrants[before]["id"]) if before >= 0 else "none"
+					_add_turning_point(i, tick, entrant, actor, "read_own_core_damaged", "t%d %s/%s READ %d: own core cell held by %s" % [tick, actor, process, address, holder])
+			else:
+				record["read_kind"] = "routine"
+			(last_core_read[entrant] as Dictionary)[address] = before
+		elif entrant >= 0 and before >= 0 and before != entrant:
+			var owner_id := String(_model.entrants[before]["id"])
+			var read_key := "%d/%d" % [address, before]
+			var is_new := not (seen_enemy_read[entrant] as Dictionary).has(read_key)
+			(seen_enemy_read[entrant] as Dictionary)[read_key] = true
+			if core == before:
+				record["read_kind"] = "enemy_core"
+				record["read_discovery"] = is_new
+				if is_new and not (seen_enemy_core_owner[entrant] as Dictionary).has(before):
+					(seen_enemy_core_owner[entrant] as Dictionary)[before] = true
+					_add_turning_point(i, tick, entrant, actor, "read_enemy_core", "t%d %s/%s READ %d: found %s core cell" % [tick, actor, process, address, owner_id])
+			else:
+				record["read_kind"] = "enemy_cell"
+				record["read_discovery"] = is_new
+				if is_new:
+					_add_turning_point(i, tick, entrant, actor, "read_enemy_cell", "t%d %s/%s READ %d: found %s-owned cell" % [tick, actor, process, address, owner_id])
+		else:
+			record["read_kind"] = "routine"
 	return record
 
 
-func _end_of_tick(i: int, frame: Dictionary, owners: PackedInt32Array) -> void:
+func _classify_delivery(
+	i: int, frame: Dictionary, sense: Dictionary, cells: int,
+	had_contact: Dictionary, active_contacts: Dictionary
+) -> void:
+	var actor := String(frame["actor"])
+	var process := String(frame["process"])
+	var tick := int(frame["t"])
+	var entrant := int(sense["entrant"])
+	var sensed: Array = sense["sensed"]
+	var sensed_set := {}
+	for addr in sensed:
+		sensed_set[int(addr)] = true
+	var active: Dictionary = active_contacts.get(actor, {})
+	if half_width >= 0:
+		var center := int(sense["address"])
+		for prev_addr in active.keys():
+			if _circular_distance(int(prev_addr), center, cells) <= half_width and not sensed_set.has(int(prev_addr)):
+				active.erase(prev_addr)
+	if sensed.is_empty():
+		sense["sense_kind"] = "empty"
+	else:
+		if not had_contact.has(actor):
+			had_contact[actor] = true
+			sense["sense_kind"] = "first_contact"
+			_add_turning_point(i, tick, entrant, actor, "first_contact", "t%d %s/%s SENSE delivered: first contact at %s" % [tick, actor, process, _cells_csv(sensed)])
+		else:
+			var all_known := true
+			for addr in sensed:
+				if not active.has(int(addr)):
+					all_known = false
+					break
+			if all_known:
+				sense["sense_kind"] = "confirm"
+			else:
+				sense["sense_kind"] = "reacquire"
+				_add_turning_point(i, tick, entrant, actor, "reacquire", "t%d %s/%s SENSE delivered: reacquired at %s" % [tick, actor, process, _cells_csv(sensed)])
+		for addr in sensed:
+			active[int(addr)] = true
+	active_contacts[actor] = active
+
+
+func _end_of_tick(i: int, frame: Dictionary, owners: PackedInt32Array, previous_disrupted: Array) -> Array:
 	var tick := int(frame["t"])
 	var held := PackedInt32Array()
 	for e in _model.entrants.size():
-		var count := 0
-		for cell in _model.entrants[e]["core"]:
-			if owners[int(cell)] == e:
-				count += 1
-		held.append(count)
+		held.append(_count_core_held(e, owners))
 	_core_at_tick_end[tick] = held
 	var disrupted: Array = []
 	for pair in frame["disrupted"]:
-		disrupted.append([pair[0], pair[1], _anchor(frame, String(pair[0]), String(pair[1]))])
+		var d_actor := String(pair[0])
+		var d_proc := String(pair[1])
+		var d_anchor := _anchor(frame, d_actor, d_proc)
+		disrupted.append([pair[0], pair[1], d_anchor])
+		if not previous_disrupted.has(pair):
+			var d_e := int(_model.entrant_index.get(d_actor, -1))
+			_add_turning_point(i, tick, d_e, d_actor, "disruption", "t%d %s/%s disrupted at %d" % [tick, d_actor, d_proc, d_anchor])
+	var next_disrupted := (frame["disrupted"] as Array).duplicate(true)
 	var eliminated: Array = _model.eliminated_at(i)
-	if disrupted.is_empty() and eliminated.is_empty():
-		return
-	_tick_event_frames.append(i)
-	tick_events.append({"i": i, "t": tick, "disrupted": disrupted, "eliminated": eliminated})
+	for entrant_id in eliminated:
+		var e := int(_model.entrant_index.get(String(entrant_id), -1))
+		var e_name := String(_model.entrants[e]["name"]) if e >= 0 else ""
+		var c_size := (_model.entrants[e]["core"] as Array).size() if e >= 0 else 0
+		var c_held := held[e] if e >= 0 and held.size() > e else 0
+		_add_turning_point(i, tick, e, String(entrant_id), "elimination", "t%d %s %s eliminated (core %d/%d)" % [tick, entrant_id, e_name, c_held, c_size])
+	if not disrupted.is_empty() or not eliminated.is_empty():
+		_tick_event_frames.append(i)
+		tick_events.append({"i": i, "t": tick, "disrupted": disrupted, "eliminated": eliminated})
+	return next_disrupted
+
+
+func _count_core_held(entrant: int, owners: PackedInt32Array) -> int:
+	var count := 0
+	for cell in _model.entrants[entrant]["core"]:
+		if owners[int(cell)] == entrant:
+			count += 1
+	return count
+
+
+func _add_turning_point(i: int, tick: int, entrant: int, actor: String, kind: String, text: String) -> void:
+	_turning_points.append({"i": i, "t": tick, "entrant": entrant, "actor": actor, "kind": kind, "text": text})
+	_turning_point_frames.append(i)
+
+
+static func _circular_distance(a: int, b: int, arena: int) -> int:
+	var d := posmod(a - b, arena)
+	return mini(d, arena - d)
+
+
+static func _cells_csv(cells: Array) -> String:
+	var parts: PackedStringArray = []
+	for cell in cells:
+		parts.append(str(int(cell)))
+	return ", ".join(parts)
 
 
 ## For each eliminated entrant, the last recorded WRITE that took one of its
@@ -220,6 +393,7 @@ func at(index: int) -> Dictionary:
 			# Where and when it will be delivered is a later frame: not handed over yet.
 			shown_sense["delivered"] = -1
 			shown_sense["receiver"] = -1
+			shown_sense["sense_kind"] = ""
 		shown_sense["state"] = state
 		shown_sense["age"] = age if state == "delivered" else 0
 		shown_sense["current"] = int(sense["i"]) == index or delivered == index
@@ -269,6 +443,26 @@ func delivery_at(index: int) -> Dictionary:
 	return _delivery_frames.get(index, {})
 
 
+## Recent verified tactical turning points up to and including `index`, newest first.
+func turning_points(index: int, limit: int = TURNING_POINT_LIMIT) -> Array:
+	var end := _turning_point_frames.bsearch(index + 1)
+	var out: Array = []
+	for k in range(end - 1, maxi(-1, end - 1 - limit), -1):
+		out.append(_turning_points[k])
+	return out
+
+
+## Most recent tactical turning point at or before `index` within `max_tick_age` ticks, or {}.
+func latest_turning_point(index: int, max_tick_age: int = 1) -> Dictionary:
+	var end := _turning_point_frames.bsearch(index + 1)
+	if end <= 0:
+		return {}
+	var latest: Dictionary = _turning_points[end - 1]
+	if _model.tick_of(index) - int(latest["t"]) > max_tick_age:
+		return {}
+	return latest
+
+
 ## Core integrity per entrant at `index`: cells held now, the change since the
 ## previous tick boundary, and a level (ok, low, critical or eliminated).
 func cores(index: int) -> Array:
@@ -298,7 +492,7 @@ func tick_summary(index: int) -> Array:
 	var tick: int = _model.tick_of(index)
 	var out: Array = []
 	for e in _model.entrants.size():
-		out.append({"writes": 0, "took": 0, "core_hits": 0, "recovered": 0, "hits": 0, "moves": 0, "senses": 0, "reads": 0, "refused": 0})
+		out.append({"writes": 0, "took": 0, "core_hits": 0, "recovered": 0, "hits": 0, "moves": 0, "senses": 0, "reads": 0, "read_discoveries": 0, "refused": 0})
 	for k in range(_action_frames.bsearch(tick_start(tick)), actions.size()):
 		var action: Dictionary = actions[k]
 		if int(action["i"]) > index:
@@ -322,4 +516,5 @@ func tick_summary(index: int) -> Array:
 				counts["senses"] += 1
 			"read":
 				counts["reads"] += 1
+				counts["read_discoveries"] += 1 if bool(action["read_discovery"]) else 0
 	return out

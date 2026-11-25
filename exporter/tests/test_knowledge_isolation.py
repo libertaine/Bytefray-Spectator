@@ -51,7 +51,11 @@ STARTS = (0, 91)  # the teaching layout: A's first scan window covers B's anchor
 UNOBSERVED = ("quiet", "busy", "split")
 # The sounds the Agent A perspective can make (scripts/sound_cues.gd AGENT_SOUNDS), and the
 # announcer's opening sequence, which is the same for every match.
-AGENT_SOUNDS = {"sense", "receipt", "contact", "write", "move_up", "move_down"}
+AGENT_SOUNDS = {
+    "sense", "receipt", "contact", "reacquire",
+    "read_discovery", "core_recovery",
+    "write", "move_up", "move_down",
+}
 INTRO = "intro"
 
 

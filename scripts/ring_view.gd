@@ -184,6 +184,32 @@ func _write_line(center: Vector2, inner: float, source: float, target: float, co
 	draw_line(start, end, color, line_width)
 
 
+func _dashed_line(start: Vector2, end: Vector2, color: Color, line_width: float) -> void:
+	var delta := end - start
+	var total := delta.length()
+	if total <= 1.0:
+		return
+	var dir := delta / total
+	var pos := 0.0
+	while pos < total:
+		var seg_end := minf(pos + 7.0, total)
+		draw_line(start + dir * pos, start + dir * seg_end, color, line_width)
+		pos += 12.0
+
+
+func _diamond(at: Vector2, half: float, color: Color, filled: bool) -> void:
+	var points := PackedVector2Array([
+		at + Vector2(0, -half),
+		at + Vector2(half, 0),
+		at + Vector2(0, half),
+		at + Vector2(-half, 0),
+	])
+	if filled:
+		draw_colored_polygon(points, color)
+	points.append(points[0])
+	draw_polyline(points, color.lightened(0.25) if filled else color, 2.0)
+
+
 func _angle(cell: float) -> float:
 	return -PI / 2.0 + TAU * cell / float(arena_size)
 
@@ -299,6 +325,8 @@ func _draw_senses(center: Vector2, radius: float, width: float) -> void:
 			var at := _at(center, lane, float(anchor) + 0.5)
 			if delivered:
 				draw_circle(at, 4.0, Color(Color.WHITE, alpha))
+				if String(sense.get("sense_kind", "")) == "reacquire":
+					draw_arc(at, 7.0, 0.0, TAU, 16, Color(SAMPLE_COLORS["POSITIVE"], alpha), 2.0)
 			else:
 				draw_arc(at, 4.0, 0.0, TAU, 12, Color.WHITE, 1.5)
 		if bool(sense["current"]) or (delivered and int(sense["age"]) == 0):
@@ -338,10 +366,23 @@ func _draw_actions(center: Vector2, radius: float, width: float) -> void:
 				var ring := _at(center, radius + width * 0.95, target)
 				var mark := DAMAGE if action["core_change"] == "damage" else RECOVERY
 				draw_arc(ring, width * 0.5, 0.0, TAU, 16, Color(mark, alpha), 2.5)
+				if action["core_change"] == "recovery":
+					draw_arc(ring, width * 0.78, 0.0, TAU, 16, Color(color.lightened(0.45), alpha), 2.0)
 			if action["decisive"]:
 				decisive = action
+		elif kind == "read" and bool(action.get("read_discovery", false)):
+			var target := float(action["address"]) + 0.5
+			var r_kind := String(action.get("read_kind", ""))
+			var mark_color: Color = SAMPLE_COLORS["POSITIVE"] if r_kind == "enemy_core" else (DAMAGE if r_kind == "own_core_damaged" else color.lightened(0.4))
+			if int(action["age"]) == 0 and int(action["source"]) >= 0:
+				var inner := radius - width * 0.55
+				_dashed_line(_at(center, inner, float(action["source"]) + 0.5), _at(center, inner, target), Color(mark_color, 0.9 if current else 0.45), 2.0 if current else 1.5)
+			_diamond(_at(center, radius, target), width * 0.42, Color(mark_color, alpha), r_kind == "enemy_core")
+			if r_kind == "enemy_core" or r_kind == "own_core_damaged":
+				_diamond(_at(center, radius + width * 0.95, target), width * 0.54, Color(mark_color, alpha), false)
 		elif kind == "move":
-			_move_arc(center, radius + width * 2.45, float(action["from"]), float(action["delta"]), Color(color, alpha), 3.0 if current else 2.0)
+			var deploy := bool(action.get("deployment", false))
+			_move_arc(center, radius + width * 2.45, float(action["from"]), float(action["delta"]), Color(color.lightened(0.25) if deploy else color, alpha), (3.5 if deploy else 3.0) if current else (2.5 if deploy else 2.0))
 	if not decisive.is_empty():
 		var cell := float(decisive["address"]) + 0.5
 		draw_arc(_at(center, radius + width * 0.95, cell), width * 1.1, 0.0, TAU, 24, DAMAGE, 3.0)
@@ -453,6 +494,9 @@ func _draw_agent(center: Vector2, radius: float, width: float) -> void:
 		var h := float(sample["half_width"])
 		_lane_backing(center, radius - width * 1.1, c - h, c + h + 1.0, width * 0.5)
 		_span_arc(center, radius - width * 1.1, c - h, c + h + 1.0, Color(color, 0.55), width * 0.5)
+		if String(sample.get("sample_kind", "")) == "reacquire":
+			for addr in sample.get("addresses", []):
+				draw_arc(_at(center, radius + width * 1.6, float(addr) + 0.5), 11.0, 0.0, TAU, 16, Color(SAMPLE_COLORS["POSITIVE"], 0.85), 2.0)
 	var own: Dictionary = state["own_actions"]
 	for pending in own["pending_senses"]:
 		var c := float(pending[1])
@@ -475,8 +519,22 @@ func _draw_agent(center: Vector2, radius: float, width: float) -> void:
 			_write_line(center, inner, float(write[1]) + 0.5, target, Color(agent_color, 0.22), 1.0)
 		# Outline only: whether the write changed ownership is not delivered.
 		draw_arc(_at(center, radius, target), width * 0.24, 0.0, TAU, 12, Color(agent_color.lightened(0.35), _alpha(age)), 1.5)
+	for read_item in own.get("notable_reads", []):
+		var r_source := float(read_item[1]) + 0.5
+		var r_target := float(read_item[2]) + 0.5
+		var r_kind := String(read_item[3])
+		var r_age := int(read_item[5])
+		var r_alpha := _alpha(r_age)
+		var r_color: Color = DAMAGE if r_kind == "own_core_damaged" else (RECOVERY if r_kind == "own_core_recovered" else SAMPLE_COLORS["POSITIVE"])
+		if r_age == 0 and int(read_item[1]) >= 0:
+			var inner := radius - width * 0.55
+			_dashed_line(_at(center, inner, r_source), _at(center, inner, r_target), Color(r_color, 0.65), 1.5)
+		_diamond(_at(center, radius, r_target), width * 0.42, Color(r_color, r_alpha), r_kind == "enemy_owned")
+		if r_kind == "own_core_damaged" or r_kind == "own_core_recovered":
+			_diamond(_at(center, radius + width * 0.95, r_target), width * 0.54, Color(r_color, r_alpha), false)
 	for move in own["moves"]:
-		_move_arc(center, radius + width * 2.45, float(move[1]), float(move[2]), Color(agent_color, _alpha(int(move[3]))), 2.0)
+		var deploy: bool = (move as Array).size() > 4 and int(move[4]) == 1
+		_move_arc(center, radius + width * 2.45, float(move[1]), float(move[2]), Color(agent_color.lightened(0.25) if deploy else agent_color, _alpha(int(move[3]))), 2.5 if deploy else 2.0)
 	for contact in state["contacts"]:
 		var age := float(contact["age_ticks"])
 		var alpha := clampf(1.0 - age / 400.0, 0.3, 1.0)

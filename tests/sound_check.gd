@@ -163,7 +163,7 @@ func _check_cues(dir: String, heard: Dictionary) -> void:
 		j += 1
 	for event in refused_agent["frames"][j]["events"]:
 		event["status"] = "REFUSED"
-	check(Cues.agent_cues(AgentModel.new(refused_agent), j - 1, j).filter(func(cue: Dictionary) -> bool: return cue["sound"] != "receipt" and cue["sound"] != "contact").is_empty(), "%s: a refused Agent A action makes no sound" % name)
+	check(Cues.agent_cues(AgentModel.new(refused_agent), j - 1, j).filter(func(cue: Dictionary) -> bool: return not (cue["sound"] in ["receipt", "contact", "reacquire", "read_discovery", "core_recovery"])).is_empty(), "%s: a refused Agent A action makes no sound" % name)
 
 	var counts := {}
 	for cue in actual + agent_actual:
@@ -184,13 +184,22 @@ func _broadcast_reference(doc: Dictionary) -> Array:
 	for e in doc["entrants"].size():
 		index[String(doc["entrants"][e]["id"])] = e
 	var arena := int(doc["arena_size"])
+	var half_w := int(BroadcastEffects.SENSE_HALF_WIDTH.get(String(doc["ruleset_id"]), -1))
 	var core_of := {}
+	var last_core_read: Array = []
+	var seen_enemy_read: Array = []
 	for e in doc["entrants"].size():
+		var own_core := {}
 		for cell in doc["entrants"][e]["core"]:
 			core_of[int(cell)] = e
+			own_core[int(cell)] = e
+		last_core_read.append(own_core)
+		seen_enemy_read.append({})
 	var frames: Array = doc["frames"]
 	var owners := []
 	var pending := {}
+	var had_contact := {}
+	var active_contacts := {}
 	var previous_disrupted: Array = []
 	var last_tick := 0
 	for frame in frames:
@@ -218,19 +227,59 @@ func _broadcast_reference(doc: Dictionary) -> Array:
 							var core := int(core_of.get(cell, -1))
 							if core >= 0 and before == core and owners[cell] != core:
 								cues.append({"i": i, "sound": "core_damage", "variant": core})
+							elif core >= 0 and owners[cell] == core and before != core:
+								(last_core_read[core] as Dictionary)[cell] = core
+								cues.append({"i": i, "sound": "core_recovery", "variant": core})
 							else:
 								cues.append({"i": i, "sound": "write", "variant": actor})
+						"read":
+							var cell := int(frame["address"]) % arena
+							var core := int(core_of.get(cell, -1))
+							if core == actor:
+								if before != actor and int((last_core_read[actor] as Dictionary).get(cell, actor)) == actor:
+									cues.append({"i": i, "sound": "read_discovery", "variant": actor})
+								(last_core_read[actor] as Dictionary)[cell] = before
+							elif before >= 0 and before != actor:
+								var r_key := "%d/%d" % [cell, before]
+								if not (seen_enemy_read[actor] as Dictionary).has(r_key):
+									(seen_enemy_read[actor] as Dictionary)[r_key] = true
+									cues.append({"i": i, "sound": "read_discovery", "variant": actor})
 						"move":
 							var down: bool = frame["operand"] != null and int(frame["operand"]) < 0
 							cues.append({"i": i, "sound": "move_down" if down else "move_up", "variant": actor})
 						"sense":
 							cues.append({"i": i, "sound": "sense", "variant": actor})
-							pending["%s/%s" % [frame["actor"], frame["process"]]] = frame["sensed"]
+							pending["%s/%s" % [frame["actor"], frame["process"]]] = [int(frame["address"]) % arena, frame["sensed"]]
 			0:
 				var key := "%s/%s" % [frame["actor"], frame["process"]]
-				if frame["sensed"] != null and pending.has(key) and pending[key] == frame["sensed"]:
-					var found := not (frame["sensed"] as Array).is_empty()
-					cues.append({"i": i, "sound": "contact" if found else "receipt", "variant": int(index[String(frame["actor"])])})
+				if frame["sensed"] != null and pending.has(key) and pending[key][1] == frame["sensed"]:
+					var actor_id := String(frame["actor"])
+					var center := int(pending[key][0])
+					var sensed: Array = frame["sensed"]
+					var sensed_set := {}
+					for addr in sensed:
+						sensed_set[int(addr)] = true
+					var active: Dictionary = active_contacts.get(actor_id, {})
+					if half_w >= 0:
+						for prev_addr in active.keys():
+							var d := posmod(int(prev_addr) - center, arena)
+							if mini(d, arena - d) <= half_w and not sensed_set.has(int(prev_addr)):
+								active.erase(prev_addr)
+					if sensed.is_empty():
+						cues.append({"i": i, "sound": "receipt", "variant": int(index[actor_id])})
+					else:
+						var sound_name := "contact"
+						if not had_contact.has(actor_id):
+							had_contact[actor_id] = true
+						else:
+							for addr in sensed:
+								if not active.has(int(addr)):
+									sound_name = "reacquire"
+									break
+						for addr in sensed:
+							active[int(addr)] = true
+						cues.append({"i": i, "sound": sound_name, "variant": int(index[actor_id])})
+					active_contacts[actor_id] = active
 					pending.erase(key)
 			2:
 				for pair in frame["disrupted"]:
@@ -253,10 +302,58 @@ func _broadcast_reference(doc: Dictionary) -> Array:
 func _agent_reference(doc: Dictionary) -> Array:
 	var out: Array = []
 	var frames: Array = doc["frames"]
+	var entrant_id := String(doc["entrant_id"])
+	var arena := int(doc["arena_size"])
+	var core_base := int(doc["core_base"])
+	var core_size := int(doc["core_size"])
+	var last_core_read := {}
+	for offset in core_size:
+		last_core_read[posmod(core_base + offset, arena)] = entrant_id
+	var seen_enemy_read := {}
+	var had_contact := false
+	var active_contacts := {}
 	for i in frames.size():
 		var cues: Array = []
 		for sample in frames[i]["samples"]:
-			cues.append({"i": i, "sound": "receipt" if (sample["addresses"] as Array).is_empty() else "contact", "variant": 0})
+			var center := int(sample["center"])
+			var half_w := int(sample["half_width"])
+			var addresses: Array = sample["addresses"]
+			var addr_set := {}
+			for addr in addresses:
+				addr_set[int(addr)] = true
+			for prev_addr in active_contacts.keys():
+				var d := posmod(int(prev_addr) - center, arena)
+				if mini(d, arena - d) <= half_w and not addr_set.has(int(prev_addr)):
+					active_contacts.erase(prev_addr)
+			if addresses.is_empty():
+				cues.append({"i": i, "sound": "receipt", "variant": 0})
+			else:
+				var sound_name := "contact"
+				if not had_contact:
+					had_contact = true
+				else:
+					for addr in addresses:
+						if not active_contacts.has(int(addr)):
+							sound_name = "reacquire"
+							break
+				for addr in addresses:
+					active_contacts[int(addr)] = true
+				cues.append({"i": i, "sound": sound_name, "variant": 0})
+		for read in frames[i]["reads"]:
+			var addr := posmod(int(read["address"]), arena)
+			var owner := "" if read["owner"] == null else String(read["owner"])
+			var in_own_core := posmod(addr - core_base, arena) < core_size
+			if in_own_core:
+				if owner != entrant_id and String(last_core_read.get(addr, entrant_id)) == entrant_id:
+					cues.append({"i": i, "sound": "read_discovery", "variant": 0})
+				elif owner == entrant_id and String(last_core_read.get(addr, entrant_id)) != entrant_id:
+					cues.append({"i": i, "sound": "core_recovery", "variant": 0})
+				last_core_read[addr] = owner
+			elif owner != "" and owner != entrant_id:
+				var r_key := "%d/%s" % [addr, owner]
+				if not seen_enemy_read.has(r_key):
+					seen_enemy_read[r_key] = true
+					cues.append({"i": i, "sound": "read_discovery", "variant": 0})
 		for event in frames[i]["events"]:
 			if event["status"] == "APPLIED" and event["kind"] in ["sense", "write", "move"]:
 				var sound := String(event["kind"])

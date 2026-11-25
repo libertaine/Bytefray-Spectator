@@ -13,6 +13,9 @@ extends Node
 ## - the same (sound, voice) does not restart within MIN_GAP of its last start;
 ## - at most MAX_STARTS_PER_UPDATE voices start per call, highest priority first;
 ## - overall, starts draw on a budget of RATE per second (bursts up to BURST);
+##   tactical turning points (priority >= TACTICAL_PRIORITY) can draw down to 1.0
+##   token while background texture cues (priority < TACTICAL_PRIORITY) leave
+##   TACTICAL_RESERVE tokens for upcoming tactical events;
 ##   an elimination, victory or victory call (priority EXEMPT and above)
 ##   always plays;
 ## - with every voice busy, a new cue takes over the lowest-priority voice,
@@ -37,16 +40,22 @@ const MAX_STARTS_PER_UPDATE := 3
 const RATE := 10.0  # starts per second, sustained
 const BURST := 4.0
 const EXEMPT := 6  # priorities at or above this ignore the budget
+const TACTICAL_PRIORITY := 4  # priorities at or above this are tactical turning points
+const TACTICAL_RESERVE := 1.5  # tokens reserved so routine texture never starves tactical cues
 const DEFAULT_VOLUME := 0.6
 ## Higher wins when cues compete.
 const PRIORITY := {
-	"intro": 9, "announce": 8, "victory": 7, "elimination": 6, "core_damage": 5, "disruption": 4, "write": 3,
-	"contact": 2, "receipt": 2, "sense": 1, "move_up": 0, "move_down": 0,
+	"intro": 9, "announce": 8, "victory": 7, "elimination": 6,
+	"core_damage": 5, "core_recovery": 5,
+	"read_discovery": 4, "reacquire": 4, "disruption": 4, "contact": 4,
+	"write": 2, "sense": 1, "receipt": 0, "move_up": 0, "move_down": 0,
 }
 ## Shortest gap in seconds between two starts of the same (sound, voice).
 const MIN_GAP := {
-	"intro": 0.0, "announce": 0.0, "victory": 0.0, "elimination": 0.0, "core_damage": 0.25, "disruption": 0.45, "write": 0.15,
-	"contact": 0.18, "receipt": 0.18, "sense": 0.2, "move_up": 0.2, "move_down": 0.2,
+	"intro": 0.0, "announce": 0.0, "victory": 0.0, "elimination": 0.0,
+	"core_damage": 0.22, "core_recovery": 0.22,
+	"read_discovery": 0.18, "reacquire": 0.18, "disruption": 0.40, "contact": 0.18,
+	"write": 0.28, "sense": 0.28, "receipt": 0.35, "move_up": 0.32, "move_down": 0.32,
 }
 
 static var session_enabled := true
@@ -211,15 +220,17 @@ func play_cues(cues: Array, elapsed: float) -> Array:
 		if started.size() >= MAX_STARTS_PER_UPDATE:
 			break
 		var cue: Dictionary = merged[key]
-		var exempt: bool = PRIORITY[cue["sound"]] >= EXEMPT
-		if not exempt and _tokens < 1.0:
+		var prio: int = PRIORITY[cue["sound"]]
+		var exempt: bool = prio >= EXEMPT
+		var min_tokens: float = 1.0 if prio >= TACTICAL_PRIORITY else (1.0 + TACTICAL_RESERVE)
+		if not exempt and _tokens < min_tokens:
 			continue
 		if _last_start.has(key) and _clock - float(_last_start[key]) < float(MIN_GAP[cue["sound"]]):
 			continue
 		var wav := stream_for(cue)
 		if wav == null:
 			continue
-		var voice := _free_voice(int(PRIORITY[cue["sound"]]))
+		var voice := _free_voice(prio)
 		if voice < 0:
 			continue
 		_start(voice, cue, wav)
