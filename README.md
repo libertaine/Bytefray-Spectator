@@ -128,9 +128,12 @@ Agent A never displays the winner or passive match-length label. Seeking to the 
 or exhausting its record reveals the record boundary; that navigation limitation
 is disclosed, rather than treated as a live competitive-agent interface.
 
-Procedural effects accompany recorded actions. The opening and Broadcast winner
-sequences use original **nonverbal electronic cues**, not a spoken announcer.
-Agent A hears no winner cue. Seek, restart, switching and mute clear old sounds.
+Procedural effects accompany recorded actions, including tactical cues for `READ`
+discoveries, contact reacquisition and core recovery. Tactical turning points also
+appear in the caption bar and side panel (Broadcast shows recorded match events;
+Agent A shows delivered receipts only). The opening and Broadcast winner sequences
+use original **nonverbal electronic cues**, not a spoken announcer. Agent A hears
+no winner cue. Seek, restart, switching and mute clear old sounds.
 See [audio provenance and the excluded legacy speech assets](docs/AUDIO_ASSETS.md).
 
 ## Controls
@@ -141,18 +144,21 @@ See [audio provenance and the excluded legacy speech assets](docs/AUDIO_ASSETS.m
 | Left / Right | One recorded frame back / forward |
 | Shift+Left / Shift+Right | One tick back / forward |
 | Home / End | Restart / recorded end |
-| G or the Tick box | Go to a tick |
+| G or the Tick box | Go to a tick (Escape leaves the field) |
 | Tab | Switch Broadcast / Agent A |
 | - / + or Speed | Playback speed, in ticks per second |
-| Rendering | Filled Arcs / Classic |
+| Rendering | Filled Arcs / Classic (mouse after launch, or `--rendering=`) |
 | L | Legend |
 | M, Sound, volume slider | Toggle / adjust effects and arcade cues |
 | H, F1 or ? | Keyboard help |
 | Ctrl+O or File menu | Open a presentation folder; File also reopens the bundled showcase or quits |
 
 The timeline seeks by tick. Playback visits the recorded exchanges in order within
-each tick; it does not simulate new decisions. Sound starts with a short opening
-sequence when playing from tick 0; seek or switch skips it.
+each tick; it does not simulate new decisions. Short matches (60 ticks or fewer)
+open at 2 ticks/s in Broadcast and longer matches open at 5 ticks/s; direct
+`--perspective=agent_a` launches without `--speed=` judge only by the public tick
+limit. Sound starts with a short opening sequence when playing from tick 0; seek
+or switch skips it.
 
 ## Open another exported presentation
 
@@ -237,6 +243,7 @@ godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=sho
 godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=dev
 godot --headless --path . --script res://tests/memory_ring_check.gd
 godot --headless --path . --script res://tests/sound_check.gd
+godot --headless --path . --script res://tests/tactical_feedback_check.gd
 godot --headless --path . --script res://tests/presentation_check.gd
 godot --headless --path . --script res://tests/fixture_check.gd -- --fixture=sample
 godot --path . --script res://tests/memory_ring_pixels.gd
@@ -293,7 +300,7 @@ are explained in [historical provenance](docs/HISTORY_PROVENANCE.md).
 | `exporter/capture_v6_viewer.py` | Renders Bytefray's own V6 sensing viewer for same-match comparison (needs the pinned source and pygame) |
 | `exporter/make_arcade_cues.py` | Generates and checks the cue bank; `--name <agent>` adds a motif for a new agent's name |
 | `exporter/tests/` | pytest suite; `agents/` holds test-only opponents |
-| `tests/*.gd` | Godot checks: smoke, fixture, presentation handling (`presentation_check.gd`), memory ring (headless and native pixels) and sound. The tools are `acceptance_dump.gd` (what the viewer shows, for comparison with Bytefray's records), `capture_frames.gd` and `record_frames.gd` (fixed 1280x800 screenshots and frame recordings; need a real renderer), `render_announcer.gd` (renders the cues to WAV) and `agent_view_trace.gd` (records what the Agent A view shows) |
+| `tests/*.gd` | Godot checks: smoke, fixture, presentation handling (`presentation_check.gd`), memory ring (headless and native pixels), sound and tactical feedback (`tactical_feedback_check.gd`). The tools are `acceptance_dump.gd` (what the viewer shows, for comparison with Bytefray's records), `capture_frames.gd` and `record_frames.gd` (fixed 1280x800 screenshots and frame recordings; need a real renderer), `render_announcer.gd` (renders the cues to WAV) and `agent_view_trace.gd` (records what the Agent A view shows) |
 | `launch_showcase.ps1` | Opens the showcase with a chosen perspective, tick, speed, rendering and play state |
 | `docs/` | Phase records and evidence |
 

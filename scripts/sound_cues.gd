@@ -9,16 +9,21 @@ extends RefCounted
 ##
 ## Broadcast cues come from broadcast.json through the broadcast model and its
 ## effects. Agent A cues come from agent_a.json through the agent model alone:
-## its own applied SENSE, WRITE and MOVE and its delivered samples, voiced as
-## Agent A. Agent A is never delivered a WRITE's outcome, an opponent action,
-## a disruption, an elimination or the result, so none of those has an Agent A
-## cue, and Agent A never hears the victory call.
+## its own applied SENSE, WRITE and MOVE, its delivered samples, and its
+## delivered READ discoveries, voiced as Agent A. Agent A is never delivered a
+## WRITE's outcome, an opponent action, a disruption, an elimination or the
+## result, so none of those has an Agent A cue, and Agent A never hears the
+## victory call.
 
 const PHASE_OBSERVATION := 0
 const PHASE_ACTION := 1
 const PHASE_TICK_END := 2
 ## Sounds the Agent A perspective can produce.
-const AGENT_SOUNDS := ["sense", "receipt", "contact", "write", "move_up", "move_down"]
+const AGENT_SOUNDS := [
+	"sense", "receipt", "contact", "reacquire",
+	"read_discovery", "core_recovery",
+	"write", "move_up", "move_down",
+]
 ## Agent A's voice, matching its ring colour (RingView.agent_color, entrant colour 0).
 const AGENT_VARIANT := 0
 
@@ -35,11 +40,16 @@ static func broadcast_cues(model, effects, from: int, to: int) -> Array:
 					continue
 				match String(action["kind"]):
 					"write":
-						# A core cell lost is heard in the core owner's voice.
+						# A core cell lost or recovered is heard in the core owner's voice.
 						if action["core_change"] == "damage":
 							cues.append(_cue(i, "core_damage", int(action["core_owner"])))
+						elif action["core_change"] == "recovery":
+							cues.append(_cue(i, "core_recovery", int(action["core_owner"])))
 						else:
 							cues.append(_cue(i, "write", int(action["entrant"])))
+					"read":
+						if bool(action.get("read_discovery", false)):
+							cues.append(_cue(i, "read_discovery", int(action["entrant"])))
 					"move":
 						cues.append(_cue(i, "move_down" if _backward(frame) else "move_up", int(action["entrant"])))
 					"sense":
@@ -48,7 +58,11 @@ static func broadcast_cues(model, effects, from: int, to: int) -> Array:
 				var sense: Dictionary = effects.delivery_at(i)
 				if not sense.is_empty():
 					var found := not (sense["sensed"] as Array).is_empty()
-					cues.append(_cue(i, "contact" if found else "receipt", int(sense["entrant"])))
+					if not found:
+						cues.append(_cue(i, "receipt", int(sense["entrant"])))
+					else:
+						var s_kind := String(sense.get("sense_kind", "contact"))
+						cues.append(_cue(i, "reacquire" if s_kind == "reacquire" else "contact", int(sense["entrant"])))
 			PHASE_TICK_END:
 				cues.append_array(_tick_end_cues(model, i))
 	return cues
@@ -82,8 +96,16 @@ static func agent_cues(model, from: int, to: int) -> Array:
 	var cues: Array = []
 	for i in range(maxi(from + 1, 1), mini(to, model.frame_count() - 1) + 1):
 		var frame: Dictionary = model.frames[i]
-		for sample in frame["samples"]:
-			cues.append(_cue(i, "contact" if not (sample["addresses"] as Array).is_empty() else "receipt", AGENT_VARIANT))
+		var samples: Array = frame["samples"]
+		for s_idx in samples.size():
+			var sample: Dictionary = samples[s_idx]
+			if (sample["addresses"] as Array).is_empty():
+				cues.append(_cue(i, "receipt", AGENT_VARIANT))
+			else:
+				var s_kind: String = model.sample_kind_at(i, s_idx)
+				cues.append(_cue(i, "reacquire" if s_kind == "reacquire" else "contact", AGENT_VARIANT))
+		for r_kind in model.read_discovery_kinds_at(i):
+			cues.append(_cue(i, "core_recovery" if r_kind == "own_core_recovered" else "read_discovery", AGENT_VARIANT))
 		for event in frame["events"]:
 			if event["status"] != "APPLIED":
 				continue

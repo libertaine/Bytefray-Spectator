@@ -9,15 +9,18 @@ extends RefCounted
 
 const MIX_RATE := 22050
 const SOUNDS := [
-	"sense", "receipt", "contact", "write", "disruption",
-	"move_up", "move_down", "core_damage", "elimination", "victory",
+	"sense", "receipt", "contact", "reacquire", "read_discovery", "write",
+	"disruption", "move_up", "move_down", "core_damage", "core_recovery",
+	"elimination", "victory",
 ]
 ## Entrant voicing by entrant index (wrapping): A brighter and higher, B lower and rounder.
 const VARIANTS := [{"pitch": 1.0, "edge": 0.35}, {"pitch": 0.84, "edge": 0.12}]
 ## Audible length of each sound in seconds.
 const DURATION := {
-	"sense": 0.22, "receipt": 0.14, "contact": 0.18, "write": 0.10, "disruption": 0.24,
-	"move_up": 0.26, "move_down": 0.26, "core_damage": 0.34, "elimination": 0.40, "victory": 0.40,
+	"sense": 0.22, "receipt": 0.14, "contact": 0.18, "reacquire": 0.22,
+	"read_discovery": 0.20, "write": 0.10, "disruption": 0.24,
+	"move_up": 0.26, "move_down": 0.26, "core_damage": 0.34, "core_recovery": 0.24,
+	"elimination": 0.40, "victory": 0.40,
 }
 ## Silence before the sound starts. The victory sting waits for the elimination
 ## burst it is recorded with, so both can start on the same frame.
@@ -25,6 +28,7 @@ const LEAD_IN := {"victory": 0.30}
 const FADE := 0.004  # seconds of fade-in and fade-out against clicks
 
 const _VICTORY_STEPS := [0, 4, 7, 12]  # semitones: major arpeggio to the octave
+const _REACQUIRE_FREQS := [1318.5, 1760.0, 2349.3]  # E6 -> A6 -> D7 three-step rising radar lock
 
 
 ## A playable stream of `sound` voiced as `variant`.
@@ -68,40 +72,59 @@ static func render(sound: String, variant: int) -> PackedFloat32Array:
 		var u := t / duration
 		var s := 0.0
 		match sound:
-			"sense":  # radar sweep: rising glide with a fast tremolo
+			"sense":  # soft radar sweep: rising glide with a fast tremolo
 				phase += TAU * 500.0 * pitch * pow(3.2, u) / MIX_RATE
 				var tremolo := 1.0 - 0.3 * (0.5 + 0.5 * sin(TAU * 28.0 * t))
-				s = 0.35 * _tone(phase, edge * 0.5) * tremolo * pow(1.0 - u, 1.5)
-			"receipt":  # confirmation ping
+				s = 0.18 * _tone(phase, edge * 0.5) * tremolo * pow(1.0 - u, 1.5)
+			"receipt":  # quiet empty-scan confirmation ping
 				phase += TAU * 1568.0 * pitch / MIX_RATE
-				s = 0.3 * (sin(phase) + 0.3 * sin(2.01 * phase)) * exp(-t * 30.0)
+				s = 0.12 * (sin(phase) + 0.3 * sin(2.01 * phase)) * exp(-t * 32.0)
 			"contact":  # two-note ping: the delivered sample found anchors
 				var second := t >= 0.07
 				var tn := t - 0.07 if second else t
 				phase += TAU * (2093.0 if second else 1568.0) * pitch / MIX_RATE
-				s = 0.3 * (sin(phase) + 0.3 * sin(2.01 * phase)) * exp(-tn * 32.0)
-			"write":  # sharp energy pulse: fast pitch drop plus a noise click
+				s = 0.32 * (sin(phase) + 0.3 * sin(2.01 * phase)) * exp(-tn * 30.0)
+			"reacquire":  # three-step rising radar lock motif: renewed contact at a new/relocated anchor
+				var step := mini(int(t / 0.065), _REACQUIRE_FREQS.size() - 1)
+				var tn := t - step * 0.065
+				phase += TAU * _REACQUIRE_FREQS[step] * pitch / MIX_RATE
+				s = 0.34 * (_tone(phase, 0.18 + edge * 0.5) + 0.25 * sin(2.0 * phase)) * exp(-tn * 24.0) * minf(1.0, tn / FADE)
+			"read_discovery":  # focused double-pulse sonar discovery chime
+				var second := t >= 0.085
+				var tn := t - 0.085 if second else t
+				var f := (1760.0 if second else 1174.66) * pitch
+				phase += TAU * f / MIX_RATE
+				phase2 += TAU * (f * 1.5) / MIX_RATE
+				s = 0.36 * (_tone(phase, 0.2 + edge * 0.6) + 0.28 * sin(phase2)) * exp(-tn * 22.0) * minf(1.0, tn / FADE)
+			"write":  # subdued energy pulse for routine non-core writes
 				phase += TAU * (110.0 + 880.0 * exp(-t * 30.0)) * pitch / MIX_RATE
 				var click := rng.next() * maxf(0.0, 1.0 - t / 0.012)
-				s = 0.32 * (_tone(phase, 0.25 + edge) + 0.6 * click) * exp(-t * 35.0)
+				s = 0.16 * (_tone(phase, 0.25 + edge) + 0.5 * click) * exp(-t * 35.0)
 			"disruption":  # gated, bit-crushed crackle over a low buzz
 				var gate := 1.0 if hash(int(t / 0.008) * 31 + variant) % 10 < 6 else 0.15
 				var crackle := snappedf(rng.next(), 0.25) * gate
 				phase += TAU * 60.0 * pitch / MIX_RATE
 				var buzz := 0.4 * signf(sin(phase))
-				s = 0.28 * (crackle + buzz) * (1.0 - u)
-			"move_up", "move_down":  # swoosh: swept low-passed noise and a soft glide
+				s = 0.30 * (crackle + buzz) * (1.0 - u)
+			"move_up", "move_down":  # quiet swoosh: swept low-passed noise and a soft glide
 				var rising := sound == "move_up"
 				var sweep := u if rising else 1.0 - u
 				var cutoff := 400.0 * pow(7.5, sweep)
 				lowpass += (1.0 - exp(-TAU * cutoff / MIX_RATE)) * (rng.next() - lowpass)
 				phase += TAU * 330.0 * pitch * pow(2.0, sweep) / MIX_RATE
-				s = 0.25 * (lowpass * 1.6 + 0.35 * sin(phase)) * pow(sin(PI * u), 2.0)
+				s = 0.16 * (lowpass * 1.6 + 0.35 * sin(phase)) * pow(sin(PI * u), 2.0)
 			"core_damage":  # deep impact with a descending tone
 				phase += TAU * 220.0 * pitch * pow(0.25, u) / MIX_RATE
 				lowpass += 0.15 * (rng.next() - lowpass)
 				var thump := lowpass * 3.0 * maxf(0.0, 1.0 - t / 0.03)
 				s = 0.45 * tanh(1.8 * (_tone(phase, 0.5) + thump)) * exp(-t * 9.0)
+			"core_recovery":  # crisp rising major-fifth chime when a damaged core cell is recovered
+				var second := t >= 0.09
+				var tn := t - 0.09 if second else t
+				var f := (880.0 if second else 587.33) * pitch
+				phase += TAU * f / MIX_RATE
+				phase2 += TAU * (f * 2.0) / MIX_RATE
+				s = 0.38 * (_tone(phase, 0.22 + edge * 0.5) + 0.32 * sin(phase2)) * exp(-tn * 14.0) * minf(1.0, tn / FADE)
 			"elimination":  # low-frequency burst: sub glide, detuned fifth, rumble
 				var f := 90.0 * pitch * pow(1.0 / 3.0, u)
 				phase += TAU * f / MIX_RATE

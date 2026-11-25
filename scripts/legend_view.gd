@@ -12,7 +12,8 @@ const BROADCAST := [
 	["core", "Core cells: bright = held, dark = lost"],
 	["markers", "Process; hollow = hit by an opponent WRITE last tick"],
 	["pending", "SENSE sample taken, not yet delivered"],
-	["delivered", "Sample delivered to its process"],
+	["delivered", "Sample delivered (gold ring = reacquired contact)"],
+	["read_discovery", "READ discovery: enemy cell / core (diamond)"],
 	["writes", "WRITE: filled = took the cell, ring = owner unchanged"],
 	["move", "MOVE"],
 	["core_marks", "Core cell lost (red) / regained (white)"],
@@ -24,6 +25,7 @@ const AGENT := [
 	["pending_agent", "Own SENSE requested, result pending"],
 	["sample", "Latest delivered sample (gold = positive)"],
 	["contacts", "Remembered contact; grey = absent in a newer sample"],
+	["read_agent", "Delivered READ discovery (diamond; core unknown)"],
 	["write_agent", "Own WRITE target (outcome not delivered)"],
 	["move_agent", "Own MOVE"],
 ]
@@ -81,7 +83,16 @@ func _glyph(kind: String, at: Vector2) -> void:
 				draw_arc(at + Vector2(22, 0), 4.0, 0.0, TAU, 12, Color.WHITE, 1.5)
 		"delivered":
 			draw_line(at, at + Vector2(44, 0), Color(a, 0.55), 4.0)
-			draw_circle(at + Vector2(22, 0), 4.0, Color.WHITE)
+			draw_circle(at + Vector2(14, 0), 4.0, Color.WHITE)
+			draw_circle(at + Vector2(32, 0), 4.0, Color.WHITE)
+			draw_arc(at + Vector2(32, 0), 6.5, 0.0, TAU, 14, gold, 1.5)
+		"read_discovery", "read_agent":
+			for k in 3:
+				draw_line(at + Vector2(k * 9, 0), at + Vector2(k * 9 + 5, 0), gold, 1.5)
+			var d_at := at + Vector2(34, 0)
+			var pts := PackedVector2Array([d_at + Vector2(0, -6), d_at + Vector2(6, 0), d_at + Vector2(0, 6), d_at + Vector2(-6, 0), d_at + Vector2(0, -6)])
+			draw_colored_polygon(pts.slice(0, 4), gold)
+			draw_polyline(pts, gold.lightened(0.25), 1.5)
 		"writes":
 			draw_circle(at + Vector2(10, 0), 5.0, a.lightened(0.35))
 			draw_arc(at + Vector2(32, 0), 5.0, 0.0, TAU, 12, b.lightened(0.35), 1.5)

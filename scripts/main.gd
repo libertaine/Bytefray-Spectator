@@ -50,6 +50,8 @@ const FIXTURES := {
 const DEFAULT_FIXTURE := "res://fixtures/showcase/presentation"
 const SPEEDS := [1.0, 2.0, 5.0, 10.0, 20.0, 60.0, 200.0]  # ticks per second
 const DEFAULT_SPEED := 2  # index of 5 ticks/s
+const SHORT_MATCH_MAX_TICKS := 60
+const SHORT_MATCH_SPEED := 1  # index of 2 ticks/s for short matches <= 60 ticks
 const PHASE_NAMES := ["OBSERVATION", "ACTION", "TICK_END"]
 const PERSPECTIVES := ["broadcast", "agent_a"]
 const REASONS := {
@@ -65,7 +67,7 @@ const MENU_QUIT := 3
 const SETTINGS_PATH := "user://spectator_settings.cfg"
 # Options read by the test and capture scripts, not by the viewer.
 const TEST_OPTIONS := ["--out=", "--ticks=", "--core-log=", "--fps=", "--frames="]
-const NO_COUNTS := {"writes": 0, "took": 0, "core_hits": 0, "recovered": 0, "hits": 0, "moves": 0, "senses": 0, "reads": 0, "refused": 0}
+const NO_COUNTS := {"writes": 0, "took": 0, "core_hits": 0, "recovered": 0, "hits": 0, "moves": 0, "senses": 0, "reads": 0, "read_discoveries": 0, "refused": 0}
 # Static text: the same at every position, so it reveals nothing about the match.
 const INTRO_CAPTION := "Get ready...  (the match starts after the opening cue; seek to skip)"
 const AGENT_NOTE := "Agent A is never told the outcome. Switch to Broadcast (Tab) to see it."
@@ -84,8 +86,9 @@ const HELP := """Keyboard
   H or F1                Show or hide this help
 
 Playback gives every recorded action of a tick an equal, in-order share
-of its time: at 1 tick/s each one appears in turn. Effects fade over
-3 ticks; any seek redraws them from the record. Sounds play only
+of its time: at 1 tick/s each one appears in turn. Short matches (60 ticks
+or fewer) open at 2 ticks/s; longer matches open at 5 ticks/s. Effects fade
+over 3 ticks; any seek redraws them from the record. Sounds play only
 while playing; a seek never replays them. Playing from tick 0
 starts with the opening cue; from a later tick it is skipped."""
 
@@ -190,6 +193,9 @@ func apply_launch_options(options: Dictionary) -> void:
 		seek_tick(int(options["tick"]))
 	if int(options["speed"]) >= 0:
 		set_speed_index(int(options["speed"]))
+	elif options["perspective"] == "agent_a":
+		# load_fixture chose the Broadcast default from the hidden match length.
+		set_speed_index(default_speed_index("agent_a"))
 	set_playing(options["play"])
 
 
@@ -203,7 +209,20 @@ func set_rendering_mode(value: String) -> void:
 func set_speed_index(i: int) -> void:
 	i = clampi(i, 0, SPEEDS.size() - 1)
 	ticks_per_second = SPEEDS[i]
-	_speed_button.select(i)
+	if _speed_button:
+		_speed_button.select(i)
+
+
+## Default speed index for the loaded presentation: 2 ticks/s for short matches
+## (60 ticks or fewer) and 5 ticks/s for longer matches. Broadcast judges by
+## the match's actual length. Agent A was only told the public tick limit, so a
+## view opened directly as Agent A judges by that alone and the speed it shows
+## never reveals how long the match really lasted.
+func default_speed_index(for_perspective: String = "broadcast") -> int:
+	if broadcast == null:
+		return DEFAULT_SPEED
+	var ticks: int = tick_limit if for_perspective == "agent_a" else broadcast.max_tick
+	return SHORT_MATCH_SPEED if ticks <= SHORT_MATCH_MAX_TICKS else DEFAULT_SPEED
 
 
 func load_fixture(dir: String) -> String:
@@ -223,6 +242,7 @@ func load_fixture(dir: String) -> String:
 	if load_error.is_empty():
 		perspective = "broadcast"
 		_perspective_button.select(0)
+		set_speed_index(default_speed_index())
 		index = 0
 		_refresh()  # also sets the window title for the perspective
 	else:
@@ -523,7 +543,7 @@ func _refresh() -> void:
 	else:
 		_ring.show_agent(state, agent.arena_size, sense_half_width)
 		_title.text = "Agent %s (%s) - delivered information only" % [agent.entrant_id, agent.entrant_name]
-		_caption.text = "Receipt: %s   Opponent activity: %s" % [state["receipt"], agent.opponent_activity]
+		_caption.text = _agent_caption(state)
 		_side.text = _agent_panel(state)
 	var window_title := _window_title()
 	if get_window().title != window_title:
@@ -549,12 +569,26 @@ func _refresh() -> void:
 
 
 ## While playing, mid-tick frames go by too fast to read, so the caption holds
-## the summary of the last completed tick. Paused, it describes this frame.
+## the summary of the last completed tick plus any recent tactical turning point.
+## Paused, it describes this frame.
 func _broadcast_caption() -> String:
 	if playing and not broadcast.is_tick_end(index):
 		var last: int = broadcast.tick_of(index) - 1
-		return frame_caption(broadcast.index_for_tick_end(last)) if last >= 0 else ""
+		var base := frame_caption(broadcast.index_for_tick_end(last)) if last >= 0 else ""
+		var tp := effects.latest_turning_point(index, 1)
+		if not tp.is_empty():
+			var headline := "Turning point: %s" % String(tp["text"])
+			return "%s  |  %s" % [base, headline] if base != "" else headline
+		return base
 	return frame_caption(index)
+
+
+func _agent_caption(state: Dictionary) -> String:
+	var text := "Receipt: %s   Opponent activity: %s" % [state["receipt"], agent.opponent_activity]
+	var tp := agent.latest_turning_point(index, 1)
+	if not tp.is_empty():
+		text += "   |   Turning point: %s" % String(tp["text"])
+	return text
 
 
 ## The broadcast caption of frame `at`: the recorded fact and its recorded
@@ -571,7 +605,9 @@ func frame_caption(at: int) -> String:
 		return text + _outcome_text(action)
 	var sense := effects.delivery_at(at)
 	if not sense.is_empty():
-		text += "  -  SENSE sample from tick %d delivered (%s)" % [int(sense["t"]), _anchors_text(sense["sensed"])]
+		var s_kind := String(sense.get("sense_kind", ""))
+		var tag := " (%s)" % ("first contact" if s_kind == "first_contact" else "reacquired") if s_kind in ["first_contact", "reacquire"] else ""
+		text += "  -  SENSE sample from tick %d delivered (%s)%s" % [int(sense["t"]), _anchors_text(sense["sensed"]), tag]
 	return text
 
 
@@ -594,10 +630,32 @@ func _outcome_text(action: Dictionary) -> String:
 				parts.append("DECISIVE CAPTURE")
 		"move":
 			if action["outcome"] != "refused":
-				parts.append("%d -> %d" % [int(action["from"]), posmod(int(action["from"]) + int(action["delta"]), broadcast.arena_size)])
+				var move_text := "%d -> %d" % [int(action["from"]), posmod(int(action["from"]) + int(action["delta"]), broadcast.arena_size)]
+				if bool(action.get("deployment", false)):
+					move_text += " (deploys from core)"
+				parts.append(move_text)
 		"sense":
 			if action["outcome"] != "refused":
 				parts.append("sampled %s" % _anchors_text(action["sensed"]))
+		"read":
+			if action["outcome"] != "refused":
+				var r_kind := String(action.get("read_kind", "routine"))
+				var before_owner := int(action.get("before_owner", -1))
+				var owner_id := String(broadcast.entrants[before_owner]["id"]) if before_owner >= 0 else "none"
+				match r_kind:
+					"enemy_core":
+						parts.append("found %s-owned cell (%s core)" % [owner_id, owner_id])
+					"enemy_cell":
+						parts.append("found %s-owned cell" % owner_id)
+					"own_core_damaged":
+						parts.append("own core cell held by %s" % owner_id)
+					_:
+						if before_owner < 0:
+							parts.append("unowned cell")
+						elif int(action.get("core_owner", -1)) == int(action.get("entrant", -2)):
+							parts.append("own core cell held")
+						else:
+							parts.append("own cell")
 	return "" if parts.is_empty() else "  -  " + ", ".join(parts)
 
 
@@ -629,7 +687,12 @@ func summary_text(summary: Array) -> String:
 			parts.append("%d write%s%s" % [counts["writes"], "" if counts["writes"] == 1 else "s", " (%s)" % ", ".join(detail) if not detail.is_empty() else ""])
 		for key in ["senses", "moves", "reads", "refused"]:
 			if counts[key] > 0:
-				parts.append("%d %s" % [counts[key], key.trim_suffix("s") if counts[key] == 1 else key])
+				if key == "reads":
+					var disc := int(counts.get("read_discoveries", 0))
+					var suffix := " (%d discovery)" % disc if disc == 1 else (" (%d discoveries)" % disc if disc > 1 else "")
+					parts.append("%d %s%s" % [counts["reads"], "read" if counts["reads"] == 1 else "reads", suffix])
+				else:
+					parts.append("%d %s" % [counts[key], key.trim_suffix("s") if counts[key] == 1 else key])
 		if not parts.is_empty():
 			entrant_parts.append("%s: %s" % [broadcast.entrants[e]["id"], ", ".join(parts)])
 	return "   ".join(entrant_parts)
@@ -649,6 +712,19 @@ func _broadcast_panel(state: Dictionary, shown: Dictionary, cores: Array) -> Str
 			int(cores[i]["held"]), int(cores[i]["size"]),
 			"" if note == "" or note == "ELIMINATED" else "  (%s)" % note,
 		])
+	lines.append("")
+	lines.append("Tactical turning points:")
+	var tps: Array = effects.turning_points(index)
+	if tps.is_empty():
+		lines.append("  none yet")
+	else:
+		for tp in tps:
+			var e := int(tp["entrant"])
+			if e >= 0:
+				var tp_color := RingView.ENTRANT_COLORS[e % RingView.ENTRANT_COLORS.size()].to_html(false)
+				lines.append("  [color=#%s]%s[/color]" % [tp_color, tp["text"]])
+			else:
+				lines.append("  %s" % tp["text"])
 	lines.append("")
 	lines.append("Tick %d so far:" % tick)
 	var summary: Array = effects.tick_summary(index)
@@ -711,6 +787,14 @@ func _agent_panel(state: Dictionary) -> String:
 			" (absent in a newer sample)" if contact["stale_since"] != null else "",
 		])
 	lines.append("")
+	lines.append("Tactical turning points (delivered):")
+	var tps: Array = agent.turning_points(index)
+	if tps.is_empty():
+		lines.append("  none yet")
+	else:
+		for tp in tps:
+			lines.append("  %s" % tp["text"])
+	lines.append("")
 	lines.append("Recent own events:")
 	for event in state["recent_events"]:
 		var action: bool = event["status"] != null
@@ -737,6 +821,7 @@ func _build_ui() -> void:
 	_file_menu = MenuButton.new()
 	_file_menu.text = "File"
 	_file_menu.flat = false
+	_file_menu.focus_mode = Control.FOCUS_NONE
 	var file_popup := _file_menu.get_popup()
 	file_popup.add_item("Open Presentation...", MENU_OPEN)
 	file_popup.set_item_shortcut(file_popup.get_item_index(MENU_OPEN), _shortcut(KEY_O))
@@ -750,11 +835,13 @@ func _build_ui() -> void:
 	_title.add_theme_font_size_override("font_size", 20)
 	header.add_child(_title)
 	_perspective_button = OptionButton.new()
+	_perspective_button.focus_mode = Control.FOCUS_NONE
 	_perspective_button.add_item("Broadcast")
 	_perspective_button.add_item("Agent A")
 	_perspective_button.item_selected.connect(func(i: int) -> void: set_perspective(PERSPECTIVES[i]))
 	header.add_child(_perspective_button)
 	_rendering_button = OptionButton.new()
+	_rendering_button.focus_mode = Control.FOCUS_NONE
 	_rendering_button.add_item("Classic")
 	_rendering_button.add_item("Filled Arcs")
 	_rendering_button.select(1)
@@ -774,6 +861,7 @@ func _build_ui() -> void:
 	body.add_child(column)
 	_side = RichTextLabel.new()
 	_side.bbcode_enabled = true
+	_side.focus_mode = Control.FOCUS_NONE
 	_side.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_side.add_theme_font_size_override("normal_font_size", 14)
 	column.add_child(_side)
@@ -790,6 +878,7 @@ func _build_ui() -> void:
 
 	_timeline = HSlider.new()
 	_timeline.step = 1
+	_timeline.focus_mode = Control.FOCUS_NONE
 	_timeline.value_changed.connect(
 		func(value: float) -> void:
 			if not _syncing_slider:
@@ -807,6 +896,7 @@ func _build_ui() -> void:
 	_add_button(controls, "Tick >>", func() -> void: step_tick(1))
 	_add_button(controls, "End", jump_to_end)
 	_speed_button = OptionButton.new()
+	_speed_button.focus_mode = Control.FOCUS_NONE
 	for speed in SPEEDS:
 		_speed_button.add_item("%d ticks/s" % int(speed))
 	_speed_button.select(DEFAULT_SPEED)
@@ -818,10 +908,24 @@ func _build_ui() -> void:
 	_jump = LineEdit.new()
 	_jump.custom_minimum_size = Vector2(64, 0)
 	_jump.placeholder_text = "G"
+	# G or a click focuses the field; Tab focus navigation never parks in it, so
+	# Tab always reaches the perspective shortcut in _unhandled_input.
+	_jump.focus_mode = Control.FOCUS_CLICK
 	_jump.text_submitted.connect(
 		func(text: String) -> void:
 			jump_to_tick(text)
 			_jump.release_focus()
+	)
+	_jump.gui_input.connect(
+		func(ev: InputEvent) -> void:
+			if ev is InputEventKey and ev.pressed:
+				if ev.keycode == KEY_ESCAPE:
+					_jump.release_focus()
+					get_viewport().set_input_as_handled()
+				elif ev.keycode == KEY_TAB:
+					_jump.release_focus()
+					set_perspective("agent_a" if perspective == "broadcast" else "broadcast")
+					get_viewport().set_input_as_handled()
 	)
 	controls.add_child(_jump)
 	_add_button(controls, "Go", func() -> void: jump_to_tick(_jump.text))
@@ -934,6 +1038,7 @@ func _remember_directory(dir: String) -> void:
 func _add_button(parent: Control, text: String, callback: Callable) -> Button:
 	var button := Button.new()
 	button.text = text
+	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(callback)
 	parent.add_child(button)
 	_controls.append(button)
